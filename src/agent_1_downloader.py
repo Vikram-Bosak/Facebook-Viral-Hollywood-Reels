@@ -15,7 +15,7 @@ TELEGRAM_BOT_TOKEN_1 = os.environ.get('TELEGRAM_BOT_TOKEN_1')
 TELEGRAM_QUEUE_1_CHAT_ID = os.environ.get('TELEGRAM_QUEUE_1_CHAT_ID')  # Raw Videos Queue
 HISTORY_FILE = 'downloaded_history.txt'
 
-def send_video_to_telegram(video_path, caption, source_url):
+def send_video_to_telegram(video_path, caption, source_url, video_url):
     """Send downloaded video to Telegram Queue 1"""
     if not TELEGRAM_BOT_TOKEN_1 or not TELEGRAM_QUEUE_1_CHAT_ID:
         print("Telegram Bot Token or Queue 1 Chat ID is missing.")
@@ -23,7 +23,7 @@ def send_video_to_telegram(video_path, caption, source_url):
         
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_1}/sendVideo"
     
-    full_caption = f"{caption}\n\n🔗 Source: {source_url}\n#raw_video"
+    full_caption = f"{caption}\n\n🔗 Source: {source_url}\n📥 Video URL: {video_url}\n#raw_video"
     
     with open(video_path, 'rb') as video:
         files = {'video': video}
@@ -142,23 +142,27 @@ def search_and_download_latest_video():
                         if chunk:
                             f.write(chunk)
                 print("Download complete.")
-                return filename, title, video_id, article_url
+                return filename, title, video_id, article_url, video_url
             else:
                 print(f"Failed to download video file. Status code: {response.status_code}")
         except Exception as e:
             print(f"Error downloading video: {e}")
             
     print("No new valid videos found.")
-    return None, None, None, None
+    return None, None, None, None, None
 
 def main():
     print("Starting Agent 1: People.com Downloader")
-    video_path, title, video_id, source_url = search_and_download_latest_video()
+    result = search_and_download_latest_video()
+    if len(result) == 5:
+        video_path, title, video_id, source_url, video_url = result
+    else:
+        video_path, title, video_id, source_url, video_url = None, None, None, None, None
     
     if video_path and os.path.exists(video_path):
         caption = f"🎬 {title}"
         
-        success = send_video_to_telegram(video_path, caption, source_url)
+        success = send_video_to_telegram(video_path, caption, source_url, video_url)
         if success:
             save_to_history(video_id)
             # Clean up raw download

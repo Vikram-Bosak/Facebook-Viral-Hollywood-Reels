@@ -45,19 +45,37 @@ def get_latest_video_from_telegram():
                 caption = message.get('caption', '')
                 if '#raw_video' in caption:
                     file_id = message['video']['file_id']
+                    # Extract direct download URL to bypass 20MB limit
+                    import re
+                    match = re.search(r"📥 Video URL: (https?://[^\s]+)", caption)
+                    download_url = match.group(1) if match else None
+                    
                     # Clean up caption
                     raw_title = caption.replace('#raw_video', '').strip()
                     update_id = update['update_id']
                     print(f"Found raw video: file_id={file_id}")
-                    return file_id, raw_title, update_id
+                    return file_id, download_url, raw_title, update_id
                 
         print("No raw video found in recent Telegram updates.")
-        return None, None, None
+        return None, None, None, None
     except Exception as e:
         print(f"Error fetching updates from Telegram: {e}")
-        return None, None, None
+        return None, None, None, None
 
-def download_telegram_file(file_id, output_path):
+def download_telegram_file(file_id, direct_url, output_path):
+    if direct_url:
+        print(f"Downloading directly from source URL to bypass Telegram limits...")
+        try:
+            file_response = requests.get(direct_url, stream=True, timeout=60)
+            if file_response.status_code == 200:
+                with open(output_path, 'wb') as f:
+                    for chunk in file_response.iter_content(chunk_size=1024*1024):
+                        if chunk: f.write(chunk)
+                print("Direct download complete.")
+                return True
+        except Exception as e:
+            print(f"Direct download failed: {e}. Falling back to Telegram getFile.")
+            
     print(f"Fetching file path from Telegram for {file_id}")
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/getFile?file_id={file_id}"
     response = requests.get(url, timeout=10).json()
@@ -287,14 +305,14 @@ def main():
     print("Starting Agent 2: Video Editor")
     os.makedirs('workspace', exist_ok=True)
     
-    file_id, raw_caption, update_id = get_latest_video_from_telegram()
+    file_id, direct_url, raw_caption, update_id = get_latest_video_from_telegram()
     
     if file_id:
         raw_video_path = "workspace/raw_video.mp4"
         overlay_path = "workspace/overlay.png"
         edited_video_path = "workspace/edited_video.mp4"
         
-        if download_telegram_file(file_id, raw_video_path):
+        if download_telegram_file(file_id, direct_url, raw_video_path):
             headline = generate_headline(raw_caption)
             print(f"Generated Headline: {headline}")
             
