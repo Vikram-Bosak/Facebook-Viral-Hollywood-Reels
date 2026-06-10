@@ -41,12 +41,15 @@ def generate_headline(title):
         )
         
         prompt = (
-            f"Analyze the following Hollywood news title: '{title}'. "
-            "Generate an EXTREMELY SHORT, punchy, SINGLE-LINE hook for a vertical video reel. "
-            "It must be under 8 words and under 60 characters. "
-            "Identify the names of celebrities, entities, or key subjects, and enclose those specific words in brackets like [THIS]. "
-            "Make it exciting and ALL CAPS. Example: '[MARIE] RUNS UP ON [MIMI]!'\n\n"
-            "Output ONLY the single line headline text, without any conversational filler or intro."
+            f"Analyze the following Hollywood news title: '{title}'.\n"
+            "Create a punchy, exciting hook for a vertical video reel.\n"
+            "RULES:\n"
+            "1. Max 8 words and 60 characters.\n"
+            "2. ALL CAPS.\n"
+            "3. Names of celebrities/entities MUST be in brackets. Example: [BRAD PITT] MOVES ON!\n"
+            "4. Return ONLY a valid JSON object with the key \"hook\". No markdown, no conversational text.\n"
+            "Example response:\n"
+            "{\"hook\": \"[TOM HANKS] SHOCKING REVEAL!\"}"
         )
         
         response = client.chat.completions.create(
@@ -54,23 +57,32 @@ def generate_headline(title):
             messages=[
                 {"role": "user", "content": prompt}
             ],
-            temperature=1,
-            top_p=0.95,
-            max_tokens=50
+            temperature=0.7,
+            top_p=0.9,
+            max_tokens=150
         )
         raw_text = response.choices[0].message.content.strip()
         
-        # Clean up: remove conversational filler and find the actual hook
-        lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+        # Try extracting JSON
         headline = ""
-        for line in lines:
-            if '[' in line and ']' in line:
-                headline = line
-                break
+        import re
+        json_match = re.search(r'\{.*?\}', raw_text, re.DOTALL)
+        if json_match:
+            try:
+                data = json.loads(json_match.group(0))
+                headline = data.get("hook", "")
+            except:
+                pass
                 
-        if not headline and lines:
-            # Fallback to the first non-empty line if no brackets found
-            headline = lines[-1] if len(lines) == 1 else lines[0]
+        if not headline:
+            # Fallback parsing
+            lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+            for line in lines:
+                if '[' in line and ']' in line:
+                    headline = line
+                    break
+            if not headline and lines:
+                headline = lines[-1]
             
         # Clean up characters
         headline = headline.replace('"', '').replace("'", "")
@@ -97,6 +109,9 @@ def generate_headline(title):
             if not headline.endswith(']'):
                 headline += ']'
                 
+        if not headline or "USER WANTS" in headline:
+            return f"[{title.upper()[:40]}] VIRAL NEWS!"
+            
         return headline
     except Exception as e:
         print(f"AI Generation Error: {e}")
