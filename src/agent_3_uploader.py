@@ -38,7 +38,17 @@ def main():
         with open(report_path, 'r') as f:
             report = json.load(f)
     else:
-        report = {}
+        print("No report.json found. Cannot verify editing status.")
+        return
+
+    if report.get("editing_status") != "Success":
+        print(f"Editing did not succeed (Status: {report.get('editing_status')}). Skipping upload.")
+        # Cleanup
+        if os.path.exists(edited_video_path):
+            os.remove(edited_video_path)
+        if os.path.exists(meta_path):
+            os.remove(meta_path)
+        return
         
     report["description"] = fb_caption
 

@@ -161,10 +161,26 @@ def create_overlay_image(headline, output_img_path):
         except Exception as e:
             print(f"Error drawing logo: {e}")
             pass
+    else:
+        # Fallback to Text Logo
+        logo_text = "CELEBRITY BUZZ USA"
+        logo_font = ImageFont.truetype(font_path, 80)
+        logo_w = draw.textlength(logo_text, font=logo_font)
+        logo_h = 80 # Approximate height
+        logo_y = 1280 - (logo_h // 2)
+        start_x = (width - logo_w) / 2
+        # Draw background pill for text
+        padding = 20
+        draw.rounded_rectangle(
+            [start_x - padding, logo_y - padding, start_x + logo_w + padding, logo_y + logo_h + padding],
+            radius=20, fill="red"
+        )
+        draw.text((start_x, logo_y), logo_text, font=logo_font, fill="white")
+        logo_img = True # Just to indicate it exists
             
     # Calculate layout Y positions for text
     if logo_img:
-        available_start = logo_y + logo_h
+        available_start = logo_y + logo_h + 30 # Added padding below logo
     else:
         available_start = 1280
         
@@ -200,7 +216,7 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
     print("Compositing video...")
     try:
         # Base black canvas
-        base = ffmpeg.input('color=c=black:s=1080x1920', f='lavfi', t=1) # Temporary dummy length, shorter than video
+        base = ffmpeg.input('color=c=black:s=1080x1920', f='lavfi') # Removed t=1
         
         # Raw video
         vid = ffmpeg.input(input_vid_path)
@@ -217,8 +233,8 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         # Then overlay the transparent Pillow image (borders, logo, text) on top
         final = ffmpeg.overlay(vid_on_base, overlay, x=0, y=0)
         
-        # Output with audio (limited to 59 seconds for Reels)
-        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=59, shortest=None, crf=28, preset='fast')
+        # Output with audio (limited to 58 seconds for Reels)
+        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=58, shortest=None, crf=28, preset='fast')
         
         ffmpeg.run(out, overwrite_output=True, quiet=True)
         print("Video editing completed.")
@@ -228,9 +244,11 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         
         if duration < 20:
             print("Validation Failed: Video is under 20 seconds.")
+            if os.path.exists(output_vid_path): os.remove(output_vid_path)
             return False
         if duration > 59:
             print("Validation Failed: Video is over 59 seconds.")
+            if os.path.exists(output_vid_path): os.remove(output_vid_path)
             return False
             
         return True
