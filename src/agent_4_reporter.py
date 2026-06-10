@@ -63,7 +63,10 @@ def main():
         f"🔗 <b>Facebook Reel URL:</b>\n{fb_url}"
     )
     
-    send_telegram_message(message)
+    if "No new video" in download_status:
+        print("No new video to process. Skipping Telegram notification to avoid spam.")
+    else:
+        send_telegram_message(message)
     
     # Cleanup workspace completely
     if os.path.exists("workspace"):
