@@ -223,6 +223,7 @@ def create_overlay_image(headline, output_img_path):
     # We will split tokens by space first for safer wrapping.
     flat_words = []
     for text, is_highlight in tokens:
+        text = text.replace('\n', ' ')
         for word in text.split(' '):
             if word:
                 flat_words.append((word, is_highlight))
