@@ -42,14 +42,15 @@ def generate_headline(title):
         
         prompt = (
             f"Analyze the following Hollywood news title: '{title}'.\n"
-            "Create a punchy, exciting hook for a vertical video reel.\n"
+            "Create an irresistible, suspenseful clickbait hook for a vertical video reel.\n"
             "RULES:\n"
-            "1. Max 8 words and 60 characters.\n"
-            "2. ALL CAPS.\n"
-            "3. Names of celebrities/entities MUST be in brackets. Example: [BRAD PITT] MOVES ON!\n"
-            "4. Return ONLY a valid JSON object with the key \"hook\". No markdown, no conversational text.\n"
+            "1. Length MUST be between 12 to 20 words (to fill the screen nicely).\n"
+            "2. Make it highly engaging so viewers can't scroll past.\n"
+            "3. ALL CAPS.\n"
+            "4. Names of celebrities/entities MUST be in brackets. Example: [BRAD PITT] MOVES ON!\n"
+            "5. Return ONLY a valid JSON object with the key \"hook\". No markdown, no conversational text.\n"
             "Example response:\n"
-            "{\"hook\": \"[TOM HANKS] SHOCKING REVEAL!\"}"
+            "{\"hook\": \"[TOM HANKS] MAKES A SHOCKING REVEAL ABOUT HIS PAST THAT NOBODY SAW COMING!\"}"
         )
         
         response = client.chat.completions.create(
@@ -90,19 +91,10 @@ def generate_headline(title):
         # 1. Ensure ALL CAPS
         headline = headline.upper()
         
-        # 2. Limit words to 8
+        # 2. Limit words safely
         words = headline.split()
-        if len(words) > 8:
-            headline = " ".join(words[:8])
-            
-        # 3. Limit characters to 60
-        if len(headline) > 60:
-            cut_text = headline[:60]
-            last_space = cut_text.rfind(' ')
-            if last_space > 0:
-                headline = cut_text[:last_space]
-            else:
-                headline = cut_text
+        if len(words) > 25:
+            headline = " ".join(words[:25]) + "..."
                 
         # Clean up dangling brackets if we cut them off
         if headline.count('[') > headline.count(']'):
@@ -187,6 +179,13 @@ def create_overlay_image(headline, output_img_path):
             
     if current_line:
         lines.append(current_line)
+        
+    # Strictly limit to 5 lines so it NEVER spills out of the black bar
+    if len(lines) > 5:
+        lines = lines[:5]
+        if lines[-1]:
+            last_word, highlight = lines[-1][-1]
+            lines[-1][-1] = (last_word + "...", highlight)
         
     # 3. Draw Logo below the video area
     logo_path = "assets/logo.png"
