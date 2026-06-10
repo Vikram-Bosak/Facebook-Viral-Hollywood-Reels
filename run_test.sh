@@ -14,4 +14,8 @@ echo "Step 3: Running Agent 3 (Uploader)..."
 python3 -u src/agent_3_uploader.py
 
 echo "-----------------------------------------------------"
+echo "Step 4: Running Agent 4 (Reporter)..."
+python3 -u src/agent_4_reporter.py
+
+echo "-----------------------------------------------------"
 echo "Test Run Completed."

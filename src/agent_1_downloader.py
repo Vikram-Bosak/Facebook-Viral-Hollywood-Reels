@@ -11,48 +11,9 @@ from datetime import datetime
 
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN_1 = os.environ.get('TELEGRAM_BOT_TOKEN_1')
-TELEGRAM_QUEUE_1_CHAT_ID = os.environ.get('TELEGRAM_QUEUE_1_CHAT_ID')  # Raw Videos Queue
 HISTORY_FILE = 'downloaded_history.txt'
 
-def send_notification_to_telegram(title, source_url):
-    """Send text notification to Telegram Queue 1"""
-    if not TELEGRAM_BOT_TOKEN_1 or not TELEGRAM_QUEUE_1_CHAT_ID:
-        print("Telegram Bot Token or Queue 1 Chat ID is missing.")
-        return False
-        
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_1}/sendMessage"
-    
-    text = f"📥 *New Video Downloaded*\n\n🎬 *Title:* {title}\n🔗 *Source:* {source_url}\n\n_Video is saved locally in workspace._"
-    
-    data = {
-        'chat_id': TELEGRAM_QUEUE_1_CHAT_ID,
-        'text': text,
-        'parse_mode': 'Markdown'
-    }
-    
-    print(f"Sending notification to Telegram...")
-    
-    # Retry logic for Telegram API
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(url, data=data, timeout=30)
-            if response.status_code == 200:
-                print("Successfully sent notification to Telegram.")
-                return True
-            else:
-                print(f"Attempt {attempt+1} failed: {response.text}")
-        except Exception as e:
-            print(f"Attempt {attempt+1} encountered error: {e}")
-        
-        import time
-        if attempt < max_retries - 1:
-            print(f"Retrying in 5 seconds...")
-            time.sleep(5)
-            
-    print("Failed to send notification after maximum retries.")
-    return False
+
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -162,17 +123,33 @@ def search_and_download_latest_video():
 
 def main():
     print("Starting Agent 1: People.com Downloader")
+    
+    os.makedirs('workspace', exist_ok=True)
+    report = {
+        "video_name": "N/A",
+        "download_status": "Failed / No new video",
+        "editing_status": "N/A",
+        "upload_status": "N/A",
+        "seo_title": "N/A",
+        "description": "N/A",
+        "facebook_url": "N/A"
+    }
+    with open('workspace/report.json', 'w') as f:
+        json.dump(report, f)
+
     result = search_and_download_latest_video()
-    if len(result) == 5:
+    if result and len(result) == 5:
         video_path, title, video_id, source_url, video_url = result
     else:
         video_path, title, video_id, source_url, video_url = None, None, None, None, None
     
     if video_path and os.path.exists(video_path):
-        success = send_notification_to_telegram(title, source_url)
-        if success:
-            save_to_history(video_id)
-            print("Agent 1 completed successfully.")
+        save_to_history(video_id)
+        report["video_name"] = title
+        report["download_status"] = "Success"
+        with open('workspace/report.json', 'w') as f:
+            json.dump(report, f)
+        print("Agent 1 completed successfully.")
     else:
         print("No video downloaded.")
 

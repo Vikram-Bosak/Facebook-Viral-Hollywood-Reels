@@ -5,9 +5,9 @@ on:
     branches:
       - main
   schedule:
-    # Trigger 4 times a day: 8 AM, 2 PM, 8 PM, 2 AM US Eastern Time (ET)
-    # UTC Equivalent: 12:00, 18:00, 00:00, 06:00
-    - cron: '0 0,6,12,18 * * *'
+    # Trigger 6 times a day (every 4 hours)
+    # UTC Equivalent: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
+    - cron: '0 0,4,8,12,16,20 * * *'
   workflow_dispatch:
 
 jobs:
@@ -38,9 +38,6 @@ jobs:
 
       - name: 🚀 Step 1 - Run Agent 1 (Downloader)
         id: agent1
-        env:
-          TELEGRAM_BOT_TOKEN_1: ${{ secrets.TELEGRAM_BOT_TOKEN_1 }}
-          TELEGRAM_QUEUE_1_CHAT_ID: ${{ secrets.TELEGRAM_QUEUE_1_CHAT_ID }}
         run: |
           echo "Starting Agent 1..."
           python src/agent_1_downloader.py
@@ -59,8 +56,6 @@ jobs:
         id: agent2
         # Automatically skips if Agent 1 fails
         env:
-          TELEGRAM_BOT_TOKEN_2: ${{ secrets.TELEGRAM_BOT_TOKEN_2 }}
-          TELEGRAM_QUEUE_2_CHAT_ID: ${{ secrets.TELEGRAM_QUEUE_2_CHAT_ID }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "Starting Agent 2..."
@@ -78,13 +73,11 @@ jobs:
           echo "Starting Agent 3..."
           python src/agent_3_uploader.py
 
-      - name: 🚨 Send Failure Notification to Telegram
-        if: failure()
+      - name: 📊 Step 4 - Run Agent 4 (Reporter)
+        if: always()
         env:
-          TELEGRAM_BOT_TOKEN_3: ${{ secrets.TELEGRAM_BOT_TOKEN_3 }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN_3 }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          curl --retry 3 --retry-delay 5 --retry-connrefused -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN_3}/sendMessage" \
-          -d chat_id="${TELEGRAM_CHAT_ID}" \
-          -d text="🚨 *PIPELINE FAILED* 🚨%0A%0AAn error occurred in one of the agents! The workflow has been stopped.%0APlease check GitHub Actions Logs for details." \
-          -d parse_mode="Markdown"
+          echo "Starting Agent 4..."
+          python src/agent_4_reporter.py

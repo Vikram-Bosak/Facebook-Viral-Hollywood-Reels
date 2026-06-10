@@ -5,14 +5,10 @@ from dotenv import load_dotenv
 # Ensure we can import existing modules
 try:
     from src.facebook_uploader import upload_reel
-    from src.telegram_reporter import report_success, report_failure
 except ImportError:
     from facebook_uploader import upload_reel
-    from telegram_reporter import report_success, report_failure
 
 load_dotenv()
-
-TELEGRAM_BOT_TOKEN_3 = os.environ.get('TELEGRAM_BOT_TOKEN_3')
 
 def main():
     print("Starting Agent 3: Facebook Uploader")
@@ -35,14 +31,29 @@ def main():
     # Construct Facebook Caption
     fb_caption = f"{headline}\n\n#hollywood #viral #entertainment\n\nOriginal Title: {title}\nSource: {source_url}"
     
+    report_path = "workspace/report.json"
+    if os.path.exists(report_path):
+        with open(report_path, 'r') as f:
+            report = json.load(f)
+    else:
+        report = {}
+        
+    report["description"] = fb_caption
+
     try:
         print(f"Uploading to Facebook with caption: {fb_caption}")
         fb_url = upload_reel(edited_video_path, fb_caption)
         print(f"Successfully uploaded: {fb_url}")
-        report_success("edited_video.mp4", fb_caption, fb_url, 0, "reel")
+        
+        report["upload_status"] = "Success"
+        report["facebook_url"] = fb_url
     except Exception as e:
         print(f"Failed to upload to Facebook: {e}")
-        report_failure("edited_video.mp4", str(e), 0, "reel")
+        report["upload_status"] = "Failed"
+        report["facebook_url"] = str(e)
+        
+    with open(report_path, 'w') as f:
+        json.dump(report, f)
         
     # Cleanup
     if os.path.exists(edited_video_path):

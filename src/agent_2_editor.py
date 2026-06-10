@@ -14,34 +14,13 @@ except ImportError:
 
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN_2 = os.environ.get('TELEGRAM_BOT_TOKEN_2')
-TELEGRAM_QUEUE_2_CHAT_ID = os.environ.get('TELEGRAM_QUEUE_2_CHAT_ID')  # Edited Videos Queue
+
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 
 if OPENAI_API_KEY and openai:
     openai.api_key = OPENAI_API_KEY
 
-def send_notification_to_queue_2(title):
-    """Send text notification to Telegram Queue 2"""
-    if not TELEGRAM_BOT_TOKEN_2 or not TELEGRAM_QUEUE_2_CHAT_ID:
-        return False
-        
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/sendMessage"
-    
-    text = f"✂️ *Video Editing Started/Completed*\n\n🎬 *Title:* {title}\n\n_Video is saved locally in workspace for Uploader._"
-    
-    data = {
-        'chat_id': TELEGRAM_QUEUE_2_CHAT_ID,
-        'text': text,
-        'parse_mode': 'Markdown'
-    }
-    
-    try:
-        response = requests.post(url, data=data, timeout=30)
-        return response.status_code == 200
-    except Exception as e:
-        print(f"Failed to send notification: {e}")
-        return False
+
 
 def generate_headline(title):
     """Uses Nvidia AI (via OpenAI client) to generate a short headline and wrap keywords in brackets"""
@@ -63,10 +42,11 @@ def generate_headline(title):
         
         prompt = (
             f"Analyze the following Hollywood news title: '{title}'. "
-            "Generate a short, punchy 1-2 sentence headline for a vertical video reel. "
+            "Generate an EXTREMELY SHORT, punchy, SINGLE-LINE hook for a vertical video reel. "
+            "It must be under 8 words. "
             "Identify the names of celebrities, entities, or key subjects, and enclose those specific words in brackets like [THIS]. "
-            "Make it exciting and ALL CAPS. Example: 'YIKES! [MARIE MINKSSS] RUNS UP ON [MIMI LOVE]...'\n\n"
-            "Output ONLY the headline text."
+            "Make it exciting and ALL CAPS. Example: '[MARIE] RUNS UP ON [MIMI]!'\n\n"
+            "Output ONLY the single line headline text."
         )
         
         response = client.chat.completions.create(
@@ -97,20 +77,18 @@ def download_font():
     return font_path
 
 def create_overlay_image(headline, output_img_path):
-    """Generates a 1080x1920 transparent image with gradient, text, and logo at bottom"""
+    """Generates a 1080x1920 transparent image with borders, text, and logo"""
     width, height = 1080, 1920
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0)) # Transparent
     draw = ImageDraw.Draw(img)
     
-    # 1. Draw bottom dark gradient for readability
-    gradient_height = 800
-    for y in range(height - gradient_height, height):
-        alpha = int(220 * ((y - (height - gradient_height)) / gradient_height))
-        draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
+    # 1. Draw double borders (Yellow outer, White inner)
+    draw.rectangle([10, 10, 1070, 1910], outline="yellow", width=10)
+    draw.rectangle([25, 25, 1055, 1895], outline="white", width=5)
 
     # 2. Parse Text
     font_path = download_font()
-    text_font = ImageFont.truetype(font_path, 90)
+    text_font = ImageFont.truetype(font_path, 110)
     
     tokens = []
     current_word = ""
@@ -156,50 +134,57 @@ def create_overlay_image(headline, output_img_path):
     if current_line:
         lines.append(current_line)
         
-    # Calculate layout Y positions
-    total_text_height = len(lines) * 100
-    text_y_start = height - 250 - total_text_height
+    # 3. Draw Logo below the video area
+    logo_path = "assets/logo.png"
     
+    logo_w, logo_h = 0, 0
+    logo_img = None
+    logo_y = 1250 # Default if no logo
+    if os.path.exists(logo_path):
+        try:
+            logo_img = Image.open(logo_path).convert("RGBA")
+            # Scale logo to fit nicely (max width 600 or max height 180)
+            scale_w = 600 / logo_img.width
+            scale_h = 180 / logo_img.height
+            scale = min(scale_w, scale_h)
+            
+            new_w = int(logo_img.width * scale)
+            new_h = int(logo_img.height * scale)
+            logo_img = logo_img.resize((new_w, new_h), Image.LANCZOS)
+            logo_w, logo_h = logo_img.size
+            
+            # Center it so it overlaps the boundary of the video (y=1280)
+            logo_y = 1280 - (logo_h // 2)
+            
+            start_x = (width - logo_w) / 2
+            img.paste(logo_img, (int(start_x), int(logo_y)), logo_img)
+        except Exception as e:
+            print(f"Error drawing logo: {e}")
+            pass
+            
+    # Calculate layout Y positions for text
+    if logo_img:
+        available_start = logo_y + logo_h
+    else:
+        available_start = 1280
+        
+    available_space = height - available_start
+    total_text_height = len(lines) * 120
+    text_y_start = available_start + (available_space - total_text_height) // 2
+        
     # Draw Text
     for line in lines:
         line_w = sum(draw.textlength(w, font=text_font) for w, h in line) + space_width * (len(line) - 1)
         x_pos = (width - line_w) / 2
         
         for word, is_highlight in line:
-            color = (0, 255, 255, 255) if is_highlight else (255, 255, 255, 255)
-            draw.text((x_pos+3, text_y_start+3), word, font=text_font, fill=(0, 0, 0, 200)) # Shadow
+            color = (255, 255, 0, 255) if is_highlight else (255, 255, 255, 255) # Yellow highlight
+            # Draw text without shadow as background is black
             draw.text((x_pos, text_y_start), word, font=text_font, fill=color)
             x_pos += draw.textlength(word, font=text_font) + space_width
             
-        text_y_start += 100
+        text_y_start += 120
         
-    # 3. Draw Logo and Page Name below text
-    logo_y = height - 200
-    logo_path = "assets/logo.png"
-    logo_font = ImageFont.truetype(font_path, 60)
-    page_name = "CELEBRITY BUZZ USA"
-    name_w = draw.textlength(page_name, font=logo_font)
-    
-    logo_w, logo_h = 0, 0
-    logo_img = None
-    if os.path.exists(logo_path):
-        try:
-            logo_img = Image.open(logo_path).convert("RGBA")
-            scale = 80 / logo_img.height
-            logo_img = logo_img.resize((int(logo_img.width * scale), 80), Image.LANCZOS)
-            logo_w, logo_h = logo_img.size
-        except Exception:
-            pass
-            
-    total_w = logo_w + 20 + name_w if logo_img else name_w
-    start_x = (width - total_w) / 2
-    
-    if logo_img:
-        img.paste(logo_img, (int(start_x), logo_y), logo_img)
-        draw.text((start_x + logo_w + 20, logo_y + 10), page_name, font=logo_font, fill=(255, 255, 255, 255))
-    else:
-        draw.text((start_x, logo_y), page_name, font=logo_font, fill=(255, 255, 255, 255))
-
     img.save(output_img_path)
 
 def edit_video(input_vid_path, overlay_img_path, output_vid_path):
@@ -207,7 +192,7 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
     print("Compositing video...")
     try:
         # Base black canvas
-        base = ffmpeg.input('color=c=black:s=1080x1920', f='lavfi', t=1) # Temporary dummy
+        base = ffmpeg.input('color=c=black:s=1080x1920', f='lavfi', t=1) # Temporary dummy length, shorter than video
         
         # Raw video
         vid = ffmpeg.input(input_vid_path)
@@ -215,14 +200,16 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         # Overlay image
         overlay = ffmpeg.input(overlay_img_path)
         
-        # Crop to 9:16: scale height to 1920, then crop center 1080x1920
-        scaled_vid = vid.video.filter('scale', -1, 1920).filter('crop', 1080, 1920)
+        # Scale and crop the video to 1020x1250 to fit exactly inside the white border
+        scaled_vid = vid.video.filter('scale', 1020, 1250, force_original_aspect_ratio='increase').filter('crop', 1020, 1250)
         
-        # Now overlay the transparent Pillow image on top
-        final = ffmpeg.overlay(scaled_vid, overlay, x=0, y=0)
+        # First overlay the scaled video onto the black base at x=30, y=30
+        vid_on_base = ffmpeg.overlay(base, scaled_vid, x=30, y=30, shortest=1)
+        
+        # Then overlay the transparent Pillow image (borders, logo, text) on top
+        final = ffmpeg.overlay(vid_on_base, overlay, x=0, y=0)
         
         # Output with audio (limited to 20 seconds for Reels)
-        # Added crf=28 and preset='fast' to heavily compress video under 50MB for Telegram API limit
         out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=20, shortest=None, crf=28, preset='fast')
         
         ffmpeg.run(out, overwrite_output=True, quiet=True)
@@ -260,13 +247,27 @@ def main():
         
     create_overlay_image(headline, overlay_path)
     
+    report_path = "workspace/report.json"
+    if os.path.exists(report_path):
+        with open(report_path, 'r') as f:
+            report = json.load(f)
+    else:
+        report = {}
+        
+    report["seo_title"] = headline
+    
     if edit_video(raw_video_path, overlay_path, edited_video_path):
-        send_notification_to_queue_2(title)
+        report["editing_status"] = "Success"
+        with open(report_path, 'w') as f:
+            json.dump(report, f)
         
         # Cleanup intermediate files
         if os.path.exists(raw_video_path): os.remove(raw_video_path)
         if os.path.exists(overlay_path): os.remove(overlay_path)
     else:
+        report["editing_status"] = "Failed"
+        with open(report_path, 'w') as f:
+            json.dump(report, f)
         print("Editing failed.")
 
 if __name__ == "__main__":
