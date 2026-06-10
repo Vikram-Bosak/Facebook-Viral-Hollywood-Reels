@@ -1,6 +1,9 @@
 name: Hollywood Reels Automated Pipeline
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     # Trigger 4 times a day: 8 AM, 2 PM, 8 PM, 2 AM US Eastern Time (ET)
     # UTC Equivalent: 12:00, 18:00, 00:00, 06:00
