@@ -5,6 +5,7 @@ requests
 openai
 ffmpeg-python
 python-dotenv
-yt-dlp
+cloudscraper
+beautifulsoup4
 python-telegram-bot
 Pillow

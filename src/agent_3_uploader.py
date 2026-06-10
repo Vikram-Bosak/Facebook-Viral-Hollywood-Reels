@@ -22,7 +22,7 @@ def get_latest_edited_video_from_telegram():
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_3}/getUpdates"
     try:
-        response = requests.get(url, params={'timeout': 10})
+        response = requests.get(url, params={'timeout': 10}, timeout=15)
         data = response.json()
         
         if not data.get('ok') or not data.get('result'):

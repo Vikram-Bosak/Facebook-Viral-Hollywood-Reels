@@ -28,8 +28,10 @@ def get_latest_video_from_telegram():
         return None, None, None
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/getUpdates"
+    print(f"Polling Telegram getUpdates... (timeout=15)")
     try:
-        response = requests.get(url, params={'timeout': 10})
+        response = requests.get(url, params={'timeout': 10}, timeout=15)
+        print(f"Telegram response status: {response.status_code}")
         data = response.json()
         
         if not data.get('ok') or not data.get('result'):
@@ -46,6 +48,7 @@ def get_latest_video_from_telegram():
                     # Clean up caption
                     raw_title = caption.replace('#raw_video', '').strip()
                     update_id = update['update_id']
+                    print(f"Found raw video: file_id={file_id}")
                     return file_id, raw_title, update_id
                 
         print("No raw video found in recent Telegram updates.")
@@ -55,17 +58,21 @@ def get_latest_video_from_telegram():
         return None, None, None
 
 def download_telegram_file(file_id, output_path):
+    print(f"Fetching file path from Telegram for {file_id}")
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/getFile?file_id={file_id}"
-    response = requests.get(url).json()
+    response = requests.get(url, timeout=10).json()
     if not response.get('ok'):
+        print("Failed to get file path")
         return False
         
     file_path = response['result']['file_path']
     download_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN_2}/{file_path}"
     
-    file_response = requests.get(download_url)
+    print(f"Downloading file from {download_url}...")
+    file_response = requests.get(download_url, timeout=30)
     with open(output_path, 'wb') as f:
         f.write(file_response.content)
+    print("Download complete.")
     return True
 
 def generate_headline(title):
@@ -82,7 +89,8 @@ def generate_headline(title):
         # Use Nvidia's base URL as requested
         client = openai.OpenAI(
             base_url="https://integrate.api.nvidia.com/v1",
-            api_key=OPENAI_API_KEY
+            api_key=OPENAI_API_KEY,
+            timeout=30.0
         )
         
         prompt = (
@@ -112,10 +120,12 @@ def download_font():
     font_path = "assets/BebasNeue-Regular.ttf"
     os.makedirs('assets', exist_ok=True)
     if not os.path.exists(font_path):
+        print("Downloading font...")
         url = "https://github.com/google/fonts/raw/main/ofl/bebasneue/BebasNeue-Regular.ttf"
-        r = requests.get(url)
+        r = requests.get(url, timeout=20)
         with open(font_path, 'wb') as f:
             f.write(r.content)
+        print("Font downloaded.")
     return font_path
 
 def create_overlay_image(headline, output_img_path):
@@ -248,8 +258,8 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         # Now overlay the transparent Pillow image on top
         final = ffmpeg.overlay(scaled_vid, overlay, x=0, y=0)
         
-        # Output with audio
-        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', shortest=None)
+        # Output with audio (limited to 59 seconds for Reels)
+        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=59, shortest=None)
         
         ffmpeg.run(out, overwrite_output=True, quiet=True)
         print("Video editing completed.")
@@ -261,7 +271,7 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
 def send_video_to_queue_2(video_path, caption):
     if not TELEGRAM_QUEUE_2_CHAT_ID:
         return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/sendVideo"
     with open(video_path, 'rb') as video:
         files = {'video': video}
         data = {'chat_id': TELEGRAM_QUEUE_2_CHAT_ID, 'caption': f"{caption}\n#edited_video"}
@@ -270,7 +280,7 @@ def send_video_to_queue_2(video_path, caption):
     return response.status_code == 200
 
 def acknowledge_update(update_id):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/getUpdates"
     requests.get(url, params={'offset': update_id + 1})
 
 def main():
