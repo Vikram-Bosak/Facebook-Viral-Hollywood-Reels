@@ -21,77 +21,27 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 if OPENAI_API_KEY and openai:
     openai.api_key = OPENAI_API_KEY
 
-def get_latest_video_from_telegram():
-    """Polls Telegram getUpdates for the latest raw video"""
-    if not TELEGRAM_BOT_TOKEN_2:
-        print("Telegram Bot Token is missing.")
-        return None, None, None
-
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/getUpdates"
-    print(f"Polling Telegram getUpdates... (timeout=15)")
-    try:
-        response = requests.get(url, params={'timeout': 10}, timeout=15)
-        print(f"Telegram response status: {response.status_code}")
-        data = response.json()
-        
-        if not data.get('ok') or not data.get('result'):
-            print("No updates found in Telegram.")
-            return None, None, None
-
-        # Iterate backwards to find the most recent #raw_video
-        for update in reversed(data['result']):
-            message = update.get('message') or update.get('channel_post')
-            if message and 'video' in message:
-                caption = message.get('caption', '')
-                if '#raw_video' in caption:
-                    file_id = message['video']['file_id']
-                    # Extract direct download URL to bypass 20MB limit
-                    import re
-                    match = re.search(r"📥 Video URL: (https?://[^\s]+)", caption)
-                    download_url = match.group(1) if match else None
-                    
-                    # Clean up caption
-                    raw_title = caption.replace('#raw_video', '').strip()
-                    update_id = update['update_id']
-                    print(f"Found raw video: file_id={file_id}")
-                    return file_id, download_url, raw_title, update_id
-                
-        print("No raw video found in recent Telegram updates.")
-        return None, None, None, None
-    except Exception as e:
-        print(f"Error fetching updates from Telegram: {e}")
-        return None, None, None, None
-
-def download_telegram_file(file_id, direct_url, output_path):
-    if direct_url:
-        print(f"Downloading directly from source URL to bypass Telegram limits...")
-        try:
-            file_response = requests.get(direct_url, stream=True, timeout=60)
-            if file_response.status_code == 200:
-                with open(output_path, 'wb') as f:
-                    for chunk in file_response.iter_content(chunk_size=1024*1024):
-                        if chunk: f.write(chunk)
-                print("Direct download complete.")
-                return True
-        except Exception as e:
-            print(f"Direct download failed: {e}. Falling back to Telegram getFile.")
-            
-    print(f"Fetching file path from Telegram for {file_id}")
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/getFile?file_id={file_id}"
-    response = requests.get(url, timeout=10).json()
-    if not response.get('ok'):
-        print("Failed to get file path")
+def send_notification_to_queue_2(title):
+    """Send text notification to Telegram Queue 2"""
+    if not TELEGRAM_BOT_TOKEN_2 or not TELEGRAM_QUEUE_2_CHAT_ID:
         return False
         
-    file_path = response['result']['file_path']
-    download_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN_2}/{file_path}"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/sendMessage"
     
-    print(f"Downloading file from {download_url}...")
-    file_response = requests.get(download_url, timeout=30)
-    with open(output_path, 'wb') as f:
-        f.write(file_response.content)
-    print("Download complete.")
-    return True
+    text = f"✂️ *Video Editing Started/Completed*\n\n🎬 *Title:* {title}\n\n_Video is saved locally in workspace for Uploader._"
+    
+    data = {
+        'chat_id': TELEGRAM_QUEUE_2_CHAT_ID,
+        'text': text,
+        'parse_mode': 'Markdown'
+    }
+    
+    try:
+        response = requests.post(url, data=data, timeout=30)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Failed to send notification: {e}")
+        return False
 
 def generate_headline(title):
     """Uses Nvidia AI (via OpenAI client) to generate a short headline and wrap keywords in brackets"""
@@ -288,50 +238,42 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         print(f"Error during video editing: {e}")
         return False
 
-def send_video_to_queue_2(video_path, caption):
-    if not TELEGRAM_QUEUE_2_CHAT_ID:
-        return False
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/sendVideo"
-    with open(video_path, 'rb') as video:
-        files = {'video': video}
-        data = {'chat_id': TELEGRAM_QUEUE_2_CHAT_ID, 'caption': f"{caption}\n#edited_video"}
-        print("Sending edited video to Queue 2...")
-        response = requests.post(url, data=data, files=files)
-        if response.status_code != 200:
-            print(f"Telegram upload failed: {response.status_code} - {response.text}")
-    return response.status_code == 200
-
-def acknowledge_update(update_id):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN_2}/getUpdates"
-    requests.get(url, params={'offset': update_id + 1})
-
 def main():
     print("Starting Agent 2: Video Editor")
-    os.makedirs('workspace', exist_ok=True)
     
-    file_id, direct_url, raw_caption, update_id = get_latest_video_from_telegram()
+    raw_video_path = "workspace/raw_video.mp4"
+    meta_path = "workspace/meta.json"
+    overlay_path = "workspace/overlay.png"
+    edited_video_path = "workspace/edited_video.mp4"
     
-    if file_id:
-        raw_video_path = "workspace/raw_video.mp4"
-        overlay_path = "workspace/overlay.png"
-        edited_video_path = "workspace/edited_video.mp4"
+    if not os.path.exists(raw_video_path) or not os.path.exists(meta_path):
+        print("No raw video or meta.json found in workspace.")
+        return
         
-        if download_telegram_file(file_id, direct_url, raw_video_path):
-            headline = generate_headline(raw_caption)
-            print(f"Generated Headline: {headline}")
-            
-            create_overlay_image(headline, overlay_path)
-            
-            if edit_video(raw_video_path, overlay_path, edited_video_path):
-                if send_video_to_queue_2(edited_video_path, raw_caption):
-                    acknowledge_update(update_id)
-            
-        # Cleanup
+    with open(meta_path, 'r') as f:
+        meta = json.load(f)
+        
+    title = meta.get('title', 'Unknown Video')
+    print(f"Processing video: {title}")
+    
+    headline = generate_headline(title)
+    print(f"Generated Headline: {headline}")
+    
+    # Save headline to meta for Uploader
+    meta['headline'] = headline
+    with open(meta_path, 'w') as f:
+        json.dump(meta, f)
+        
+    create_overlay_image(headline, overlay_path)
+    
+    if edit_video(raw_video_path, overlay_path, edited_video_path):
+        send_notification_to_queue_2(title)
+        
+        # Cleanup intermediate files
         if os.path.exists(raw_video_path): os.remove(raw_video_path)
         if os.path.exists(overlay_path): os.remove(overlay_path)
-        if os.path.exists(edited_video_path): os.remove(edited_video_path)
     else:
-        print("No video to process.")
+        print("Editing failed.")
 
 if __name__ == "__main__":
     main()
