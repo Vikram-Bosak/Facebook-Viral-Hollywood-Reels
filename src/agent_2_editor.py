@@ -97,51 +97,21 @@ def download_font():
     return font_path
 
 def create_overlay_image(headline, output_img_path):
-    """Generates a 1080x1920 transparent image with border, logo, and formatted text"""
+    """Generates a 1080x1920 transparent image with gradient, text, and logo at bottom"""
     width, height = 1080, 1920
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0)) # Transparent
     draw = ImageDraw.Draw(img)
     
-    # 1. Draw border
-    border_color = (0, 255, 255, 255) # Cyan outer frame, or just White
-    border_width = 15
-    draw.rectangle([0, 0, width, height], outline=border_color, width=border_width)
-    draw.rectangle([border_width, border_width, width-border_width, height-border_width], outline=(255, 255, 255, 255), width=5)
-    
-    # 2. Draw Logo (Placeholder if file doesn't exist)
-    logo_y = int(height * 0.65) # Position below the video
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        try:
-            logo = Image.open(logo_path).convert("RGBA")
-            # Scale logo width to max 600px
-            lw, lh = logo.size
-            if lw > 600:
-                scale = 600 / lw
-                logo = logo.resize((600, int(lh * scale)), Image.LANCZOS)
-                lw, lh = logo.size
-            img.paste(logo, ((width - lw) // 2, logo_y), logo)
-            logo_bottom = logo_y + lh
-        except Exception as e:
-            print(f"Error loading logo: {e}")
-            logo_bottom = logo_y
-    else:
-        # Draw placeholder text for Logo
-        font_path = download_font()
-        logo_font = ImageFont.truetype(font_path, 80)
-        logo_text = "CELEBRITY BUZZ USA"
-        bbox = draw.textbbox((0, 0), logo_text, font=logo_font)
-        lw = bbox[2] - bbox[0]
-        lh = bbox[3] - bbox[1]
-        draw.text(((width - lw) // 2, logo_y), logo_text, font=logo_font, fill=(0, 255, 255, 255))
-        logo_bottom = logo_y + lh
+    # 1. Draw bottom dark gradient for readability
+    gradient_height = 800
+    for y in range(height - gradient_height, height):
+        alpha = int(220 * ((y - (height - gradient_height)) / gradient_height))
+        draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
 
-    # 3. Draw formatted Text
+    # 2. Parse Text
     font_path = download_font()
     text_font = ImageFont.truetype(font_path, 90)
     
-    # Simple word wrapping logic that supports color segments
-    # We parse the brackets [WORD] into a list of (word, is_highlighted)
     tokens = []
     current_word = ""
     in_bracket = False
@@ -161,22 +131,17 @@ def create_overlay_image(headline, output_img_path):
     if current_word:
         tokens.append((current_word, in_bracket))
 
-    # Split into lines
     lines = []
     current_line = []
     current_line_width = 0
-    max_text_width = width - 100 # 50px padding on sides
-    
+    max_text_width = width - 100
     space_width = draw.textlength(" ", font=text_font)
     
-    # This is a basic wrapper. It assumes tokens don't contain spaces internally that need breaking.
-    # We will split tokens by space first for safer wrapping.
     flat_words = []
     for text, is_highlight in tokens:
         text = text.replace('\n', ' ')
         for word in text.split(' '):
-            if word:
-                flat_words.append((word, is_highlight))
+            if word: flat_words.append((word, is_highlight))
                 
     for word, is_highlight in flat_words:
         w = draw.textlength(word, font=text_font)
@@ -191,19 +156,49 @@ def create_overlay_image(headline, output_img_path):
     if current_line:
         lines.append(current_line)
         
-    text_y_start = logo_bottom + 80
+    # Calculate layout Y positions
+    total_text_height = len(lines) * 100
+    text_y_start = height - 250 - total_text_height
     
+    # Draw Text
     for line in lines:
-        # Calculate total line width to center it
         line_w = sum(draw.textlength(w, font=text_font) for w, h in line) + space_width * (len(line) - 1)
         x_pos = (width - line_w) / 2
         
         for word, is_highlight in line:
             color = (0, 255, 255, 255) if is_highlight else (255, 255, 255, 255)
+            draw.text((x_pos+3, text_y_start+3), word, font=text_font, fill=(0, 0, 0, 200)) # Shadow
             draw.text((x_pos, text_y_start), word, font=text_font, fill=color)
             x_pos += draw.textlength(word, font=text_font) + space_width
             
-        text_y_start += 100 # Line height
+        text_y_start += 100
+        
+    # 3. Draw Logo and Page Name below text
+    logo_y = height - 200
+    logo_path = "assets/logo.png"
+    logo_font = ImageFont.truetype(font_path, 60)
+    page_name = "CELEBRITY BUZZ USA"
+    name_w = draw.textlength(page_name, font=logo_font)
+    
+    logo_w, logo_h = 0, 0
+    logo_img = None
+    if os.path.exists(logo_path):
+        try:
+            logo_img = Image.open(logo_path).convert("RGBA")
+            scale = 80 / logo_img.height
+            logo_img = logo_img.resize((int(logo_img.width * scale), 80), Image.LANCZOS)
+            logo_w, logo_h = logo_img.size
+        except Exception:
+            pass
+            
+    total_w = logo_w + 20 + name_w if logo_img else name_w
+    start_x = (width - total_w) / 2
+    
+    if logo_img:
+        img.paste(logo_img, (int(start_x), logo_y), logo_img)
+        draw.text((start_x + logo_w + 20, logo_y + 10), page_name, font=logo_font, fill=(255, 255, 255, 255))
+    else:
+        draw.text((start_x, logo_y), page_name, font=logo_font, fill=(255, 255, 255, 255))
 
     img.save(output_img_path)
 
@@ -220,16 +215,15 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         # Overlay image
         overlay = ffmpeg.input(overlay_img_path)
         
-        # Scale video to fit 1080 width, maintaining aspect ratio. 
-        # Then pad to 1080x1920 to create the full canvas.
-        scaled_vid = vid.video.filter('scale', 1080, -1).filter('pad', 1080, 1920, 0, 150, color='black')
+        # Crop to 9:16: scale height to 1920, then crop center 1080x1920
+        scaled_vid = vid.video.filter('scale', -1, 1920).filter('crop', 1080, 1920)
         
         # Now overlay the transparent Pillow image on top
         final = ffmpeg.overlay(scaled_vid, overlay, x=0, y=0)
         
-        # Output with audio (limited to 59 seconds for Reels)
+        # Output with audio (limited to 20 seconds for Reels)
         # Added crf=28 and preset='fast' to heavily compress video under 50MB for Telegram API limit
-        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=59, shortest=None, crf=28, preset='fast')
+        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=20, shortest=None, crf=28, preset='fast')
         
         ffmpeg.run(out, overwrite_output=True, quiet=True)
         print("Video editing completed.")
