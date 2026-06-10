@@ -143,9 +143,9 @@ def create_overlay_image(headline, output_img_path):
     if os.path.exists(logo_path):
         try:
             logo_img = Image.open(logo_path).convert("RGBA")
-            # Scale logo to fit nicely (max width 600 or max height 180)
-            scale_w = 600 / logo_img.width
-            scale_h = 180 / logo_img.height
+            # Scale logo to fit nicely in Top Right Corner
+            scale_w = 250 / logo_img.width
+            scale_h = 250 / logo_img.height
             scale = min(scale_w, scale_h)
             
             new_w = int(logo_img.width * scale)
@@ -153,10 +153,10 @@ def create_overlay_image(headline, output_img_path):
             logo_img = logo_img.resize((new_w, new_h), Image.LANCZOS)
             logo_w, logo_h = logo_img.size
             
-            # Center it so it overlaps the boundary of the video (y=1280)
-            logo_y = 1280 - (logo_h // 2)
+            # Position at Top Right Corner
+            logo_y = 50
+            start_x = width - logo_w - 50
             
-            start_x = (width - logo_w) / 2
             img.paste(logo_img, (int(start_x), int(logo_y)), logo_img)
         except Exception as e:
             print(f"Error drawing logo: {e}")
@@ -164,25 +164,22 @@ def create_overlay_image(headline, output_img_path):
     else:
         # Fallback to Text Logo
         logo_text = "CELEBRITY BUZZ USA"
-        logo_font = ImageFont.truetype(font_path, 80)
+        logo_font = ImageFont.truetype(font_path, 40)
         logo_w = draw.textlength(logo_text, font=logo_font)
-        logo_h = 80 # Approximate height
-        logo_y = 1280 - (logo_h // 2)
-        start_x = (width - logo_w) / 2
+        logo_h = 50 # Approximate height
+        logo_y = 50
+        start_x = width - logo_w - 70
         # Draw background pill for text
-        padding = 20
+        padding = 15
         draw.rounded_rectangle(
             [start_x - padding, logo_y - padding, start_x + logo_w + padding, logo_y + logo_h + padding],
-            radius=20, fill="red"
+            radius=15, fill="red"
         )
         draw.text((start_x, logo_y), logo_text, font=logo_font, fill="white")
         logo_img = True # Just to indicate it exists
             
-    # Calculate layout Y positions for text
-    if logo_img:
-        available_start = logo_y + logo_h + 30 # Added padding below logo
-    else:
-        available_start = 1280
+    # Calculate layout Y positions for text (logo is at top right, so it doesn't affect text)
+    available_start = 1280
         
     available_space = height - available_start
     total_text_height = len(lines) * 120
