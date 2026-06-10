@@ -278,7 +278,8 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         final = ffmpeg.overlay(scaled_vid, overlay, x=0, y=0)
         
         # Output with audio (limited to 59 seconds for Reels)
-        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=59, shortest=None)
+        # Added crf=28 and preset='fast' to heavily compress video under 50MB for Telegram API limit
+        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=59, shortest=None, crf=28, preset='fast')
         
         ffmpeg.run(out, overwrite_output=True, quiet=True)
         print("Video editing completed.")
@@ -296,6 +297,8 @@ def send_video_to_queue_2(video_path, caption):
         data = {'chat_id': TELEGRAM_QUEUE_2_CHAT_ID, 'caption': f"{caption}\n#edited_video"}
         print("Sending edited video to Queue 2...")
         response = requests.post(url, data=data, files=files)
+        if response.status_code != 200:
+            print(f"Telegram upload failed: {response.status_code} - {response.text}")
     return response.status_code == 200
 
 def acknowledge_update(update_id):
