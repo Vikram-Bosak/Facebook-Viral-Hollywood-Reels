@@ -1,5 +1,7 @@
 import os
 import requests
+import random
+import time
 from dotenv import load_dotenv
 
 # Ensure we can import existing modules
@@ -39,6 +41,12 @@ def main():
         report = {}
         
     report["description"] = fb_caption
+
+    # Add a random delay between 1 and 20 minutes (60 to 1200 seconds) to seem more human-like
+    delay_seconds = random.randint(60, 1200)
+    delay_minutes = delay_seconds // 60
+    print(f"Waiting for {delay_minutes} minutes and {delay_seconds % 60} seconds before uploading to appear human...")
+    time.sleep(delay_seconds)
 
     try:
         print(f"Uploading to Facebook with caption: {fb_caption}")
