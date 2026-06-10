@@ -187,6 +187,14 @@ def create_overlay_image(headline, output_img_path):
         
     img.save(output_img_path)
 
+def get_video_duration(video_path):
+    try:
+        probe = ffmpeg.probe(video_path)
+        return float(probe['format']['duration'])
+    except Exception as e:
+        print(f"Error getting duration: {e}")
+        return 0
+
 def edit_video(input_vid_path, overlay_img_path, output_vid_path):
     """Composites the raw video onto a 1080x1920 black background and applies the transparent overlay"""
     print("Compositing video...")
@@ -209,11 +217,22 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         # Then overlay the transparent Pillow image (borders, logo, text) on top
         final = ffmpeg.overlay(vid_on_base, overlay, x=0, y=0)
         
-        # Output with audio (limited to 20 seconds for Reels)
-        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=20, shortest=None, crf=28, preset='fast')
+        # Output with audio (limited to 59 seconds for Reels)
+        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=59, shortest=None, crf=28, preset='fast')
         
         ffmpeg.run(out, overwrite_output=True, quiet=True)
         print("Video editing completed.")
+        
+        duration = get_video_duration(output_vid_path)
+        print(f"Final video duration: {duration:.2f} seconds")
+        
+        if duration < 20:
+            print("Validation Failed: Video is under 20 seconds.")
+            return False
+        if duration > 59:
+            print("Validation Failed: Video is over 59 seconds.")
+            return False
+            
         return True
     except Exception as e:
         print(f"Error during video editing: {e}")
