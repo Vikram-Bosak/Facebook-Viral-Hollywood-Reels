@@ -91,35 +91,31 @@ def get_video_from_people_article(scraper, url):
     return None, None, None
 
 def search_and_download_latest_video():
-    """Searches People.com/video for the latest video article and downloads it"""
-    print("Scraping People.com/video for latest videos...")
+    """Searches People.com RSS feed for the latest video article and downloads it"""
+    print("Fetching RSS feed for latest videos...")
+    import xml.etree.ElementTree as ET
     scraper = cloudscraper.create_scraper()
     
     try:
-        html = scraper.get("https://people.com/video").text
-        soup = BeautifulSoup(html, 'html.parser')
+        rss_url = "https://rss.app/feeds/TevFqDIlvlfHryLT.xml"
+        xml_data = scraper.get(rss_url).text
+        root = ET.fromstring(xml_data)
     except Exception as e:
-        print(f"Failed to scrape index page: {e}")
+        print(f"Failed to fetch RSS feed: {e}")
         return None, None, None, None
         
     history = load_history()
     
     # Find article links
-    links = []
-    for a in soup.find_all('a', href=True):
-        href = a['href']
-        if 'people.com' in href and '/video/' not in href and len(href) > 40:
-            links.append(href)
-            
-    # Remove duplicates while preserving order (first usually latest)
-    seen = set()
     unique_links = []
-    for l in links:
-        if l not in seen:
-            seen.add(l)
-            unique_links.append(l)
+    for item in root.findall('.//item'):
+        link = item.find('link')
+        if link is not None and link.text:
+            href = link.text.strip()
+            if 'people.com' in href and href not in unique_links:
+                unique_links.append(href)
             
-    print(f"Found {len(unique_links)} potential video articles.")
+    print(f"Found {len(unique_links)} potential video articles from RSS.")
     
     for article_url in unique_links:
         video_url, title, video_id = get_video_from_people_article(scraper, article_url)
