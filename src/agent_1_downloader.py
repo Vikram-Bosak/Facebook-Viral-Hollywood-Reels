@@ -30,13 +30,28 @@ def send_video_to_telegram(video_path, caption, source_url):
         data = {'chat_id': TELEGRAM_QUEUE_1_CHAT_ID, 'caption': full_caption}
         
         print(f"Sending {video_path} to Telegram...")
-        response = requests.post(url, data=data, files=files)
         
-    if response.status_code == 200:
-        print("Successfully sent video to Telegram.")
-        return True
-    else:
-        print(f"Failed to send video: {response.text}")
+        # Retry logic for Telegram API
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Seek to beginning of file in case of retry
+                video.seek(0)
+                response = requests.post(url, data=data, files=files, timeout=60)
+                if response.status_code == 200:
+                    print("Successfully sent video to Telegram.")
+                    return True
+                else:
+                    print(f"Attempt {attempt+1} failed: {response.text}")
+            except Exception as e:
+                print(f"Attempt {attempt+1} encountered error: {e}")
+            
+            import time
+            if attempt < max_retries - 1:
+                print(f"Retrying in 5 seconds...")
+                time.sleep(5)
+                
+        print("Failed to send video after maximum retries.")
         return False
 
 def load_history():
