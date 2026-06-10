@@ -43,10 +43,10 @@ def generate_headline(title):
         prompt = (
             f"Analyze the following Hollywood news title: '{title}'. "
             "Generate an EXTREMELY SHORT, punchy, SINGLE-LINE hook for a vertical video reel. "
-            "It must be under 8 words. "
+            "It must be under 8 words and under 60 characters. "
             "Identify the names of celebrities, entities, or key subjects, and enclose those specific words in brackets like [THIS]. "
             "Make it exciting and ALL CAPS. Example: '[MARIE] RUNS UP ON [MIMI]!'\n\n"
-            "Output ONLY the single line headline text."
+            "Output ONLY the single line headline text, without any conversational filler or intro."
         )
         
         response = client.chat.completions.create(
@@ -56,12 +56,51 @@ def generate_headline(title):
             ],
             temperature=1,
             top_p=0.95,
-            max_tokens=200
+            max_tokens=50
         )
-        return response.choices[0].message.content.strip()
+        raw_text = response.choices[0].message.content.strip()
+        
+        # Clean up: remove conversational filler and find the actual hook
+        lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+        headline = ""
+        for line in lines:
+            if '[' in line and ']' in line:
+                headline = line
+                break
+                
+        if not headline and lines:
+            # Fallback to the first non-empty line if no brackets found
+            headline = lines[-1] if len(lines) == 1 else lines[0]
+            
+        # Clean up characters
+        headline = headline.replace('"', '').replace("'", "")
+        
+        # 1. Ensure ALL CAPS
+        headline = headline.upper()
+        
+        # 2. Limit words to 8
+        words = headline.split()
+        if len(words) > 8:
+            headline = " ".join(words[:8])
+            
+        # 3. Limit characters to 60
+        if len(headline) > 60:
+            cut_text = headline[:60]
+            last_space = cut_text.rfind(' ')
+            if last_space > 0:
+                headline = cut_text[:last_space]
+            else:
+                headline = cut_text
+                
+        # Clean up dangling brackets if we cut them off
+        if headline.count('[') > headline.count(']'):
+            if not headline.endswith(']'):
+                headline += ']'
+                
+        return headline
     except Exception as e:
         print(f"AI Generation Error: {e}")
-        return f"[{title.upper()}] VIRAL NEWS!"
+        return f"[{title.upper()[:40]}] VIRAL NEWS!"
 
 def download_font():
     """Downloads a bold font if not exists"""
