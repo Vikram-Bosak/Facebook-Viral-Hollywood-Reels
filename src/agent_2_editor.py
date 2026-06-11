@@ -42,15 +42,15 @@ def generate_headline(title):
         
         prompt = (
             f"Analyze the following Hollywood news title: '{title}'.\n"
-            "Create an irresistible, suspenseful clickbait hook for a vertical video reel.\n"
+            "Create an irresistible, extremely engaging clickbait hook for a vertical video reel.\n"
             "RULES:\n"
-            "1. Length MUST be between 12 to 20 words.\n"
-            "2. Make it highly engaging.\n"
+            "1. Make it so suspenseful and captivating that viewers CANNOT scroll past.\n"
+            "2. Keep it punchy, between 8 to 15 words for maximum impact.\n"
             "3. ALL CAPS.\n"
-            "4. DO NOT use any brackets, parentheses, or special tags in the hook.\n"
-            "5. Return EXACTLY a valid JSON object with two keys: \"hook\" (the full text) and \"highlights\" (an array of 1-3 powerful words to color yellow).\n"
+            "4. DO NOT use any brackets, parentheses, or special tags.\n"
+            "5. Return EXACTLY a valid JSON object with one key: \"hook\" (the full text).\n"
             "Example response:\n"
-            "{\"hook\": \"JENNIFER LOPEZ FACES SHOCKING NEW ALLEGATIONS THAT NOBODY SAW COMING!\", \"highlights\": [\"SHOCKING\", \"NEW\"]}"
+            "{\"hook\": \"THE SHOCKING TRUTH ABOUT JENNIFER LOPEZ NOBODY SAW COMING!\"}"
         )
         
         response = client.chat.completions.create(
@@ -122,6 +122,10 @@ def create_overlay_image(headline_data, output_img_path):
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0)) # Transparent
     draw = ImageDraw.Draw(img)
     
+    # Draw Yellow Border around the entire frame
+    border_width = 15
+    draw.rectangle([0, 0, width-1, height-1], outline=(255, 255, 0, 255), width=border_width)
+    
     # 2. Parse Text
     font_path = download_font()
     text_font = ImageFont.truetype(font_path, 70)
@@ -129,54 +133,85 @@ def create_overlay_image(headline_data, output_img_path):
     hook_text = headline_data.get("hook", "").replace('\n', ' ')
     highlights = headline_data.get("highlights", [])
     
-    flat_words = []
-    for word in hook_text.split(' '):
-        if not word: continue
-        # Determine if this word should be highlighted
-        clean_word = "".join(c for c in word if c.isalnum()).upper()
-        is_highlight = False
-        for hw in highlights:
-            hw_clean = "".join(c for c in hw if c.isalnum()).upper()
-            if hw_clean and hw_clean == clean_word:
-                is_highlight = True
-                break
-        flat_words.append((word, is_highlight))
-
+    flat_words = [word for word in hook_text.split(' ') if word]
+    
     lines = []
     current_line = []
     current_line_width = 0
-    max_text_width = width - 100
+    max_text_width = width - 150
     space_width = draw.textlength(" ", font=text_font)
                 
-    for word, is_highlight in flat_words:
+    for word in flat_words:
         w = draw.textlength(word, font=text_font)
         if current_line_width + w + space_width > max_text_width:
             lines.append(current_line)
-            current_line = [(word, is_highlight)]
+            current_line = [word]
             current_line_width = w
         else:
-            current_line.append((word, is_highlight))
+            current_line.append(word)
             current_line_width += w + (space_width if current_line_width > 0 else 0)
             
     if current_line:
         lines.append(current_line)
         
-    if len(lines) > 5:
-        lines = lines[:5]
+    if len(lines) > 6:
+        lines = lines[:6]
         if lines[-1]:
-            last_word, highlight = lines[-1][-1]
-            lines[-1][-1] = (last_word + "...", highlight)
+            lines[-1][-1] = lines[-1][-1] + "..."
             
-    total_text_height = len(lines) * 80
+    # Calculate Y start so that text sits nicely at the top
+    text_y_start = 120
+        
+    # Draw Text with tight black background
+    for line in lines:
+        line_str = " ".join(line)
+        # Calculate bounding box for the black background
+        bbox = draw.textbbox((0, 0), line_str, font=text_font)
+        line_w = bbox[2] - bbox[0]
+        
+        x_pos = (width - line_w) / 2
+        
+        # Draw Black Background Box with padding
+        padding_x = 20
+        padding_y = 15
+        box_y1 = text_y_start - padding_y
+        box_y2 = text_y_start + 70 + padding_y # 70 is rough font height for Bebas
+        
+        draw.rectangle(
+            [x_pos - padding_x, box_y1, x_pos + line_w + padding_x, box_y2],
+            fill=(0, 0, 0, 255)
+        )
+        
+        # Draw text with solid yellow color
+        draw.text((x_pos, text_y_start), line_str, font=text_font, fill=(255, 255, 0, 255))
+        
+        text_y_start += 100
+        
+    # Add "NEWS" at the bottom center
+    news_text = "NEWS"
+    news_font = ImageFont.truetype(font_path, 90)
+    news_bbox = draw.textbbox((0, 0), news_text, font=news_font)
+    news_w = news_bbox[2] - news_bbox[0]
     
-    # 3. Draw Logo Image at Top Right
+    news_x = (width - news_w) / 2
+    news_y_start = height - 200
+    
+    # Draw Black Background Box for NEWS
+    draw.rectangle(
+        [news_x - 40, news_y_start - 20, news_x + news_w + 40, news_y_start + 100],
+        fill=(0, 0, 0, 255)
+    )
+    # Draw "NEWS" in yellow
+    draw.text((news_x, news_y_start), news_text, font=news_font, fill=(255, 255, 0, 255))
+    
+    # 3. Draw Logo Image at Top Right (Drawn last to sit on top)
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         try:
             logo_img = Image.open(logo_path).convert("RGBA")
             # Scale logo to fit nicely in Top Right Corner
-            scale_w = 200 / logo_img.width
-            scale_h = 200 / logo_img.height
+            scale_w = 160 / logo_img.width
+            scale_h = 160 / logo_img.height
             scale = min(scale_w, scale_h)
             
             new_w = int(logo_img.width * scale)
@@ -184,33 +219,13 @@ def create_overlay_image(headline_data, output_img_path):
             logo_img = logo_img.resize((new_w, new_h), Image.LANCZOS)
             
             # Position at Top Right Corner
-            logo_y = 50
-            start_x = width - new_w - 50
+            logo_y = 40
+            start_x = width - new_w - 40
             
             img.paste(logo_img, (int(start_x), int(logo_y)), logo_img)
         except Exception as e:
             print(f"Error drawing logo: {e}")
             pass
-
-    # Calculate Y start so that text sits nicely at the bottom
-    # Bottom margin ~ 150px
-    text_y_start = height - 150 - total_text_height
-        
-    # Draw Text
-    for line in lines:
-        line_w = sum(draw.textlength(w, font=text_font) for w, h in line) + space_width * (len(line) - 1)
-        x_pos = (width - line_w) / 2
-        
-        for word, is_highlight in line:
-            # Yellow for highlight, White for normal
-            color = (255, 255, 0, 255) if is_highlight else (255, 255, 255, 255)
-            # Draw text with black stroke
-            draw.text((x_pos, text_y_start), word, font=text_font, fill=color, stroke_width=4, stroke_fill=(0, 0, 0, 255))
-            x_pos += draw.textlength(word, font=text_font) + space_width
-            
-        text_y_start += 80
-        
-    pass
         
     img.save(output_img_path)
 
