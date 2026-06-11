@@ -44,11 +44,11 @@ def generate_headline(title):
             f"Analyze the following Hollywood news title: '{title}'.\n"
             "Create an irresistible, suspenseful clickbait hook for a vertical video reel.\n"
             "RULES:\n"
-            "1. Length MUST be between 12 to 20 words (to fill the screen nicely).\n"
-            "2. Make it highly engaging so viewers can't scroll past.\n"
+            "1. Length MUST be between 12 to 20 words.\n"
+            "2. Make it highly engaging.\n"
             "3. ALL CAPS.\n"
             "4. Names of celebrities/entities MUST be in brackets. Example: [BRAD PITT] MOVES ON!\n"
-            "5. Return ONLY a valid JSON object with the key \"hook\". No markdown, no conversational text.\n"
+            "5. Return EXACTLY a valid JSON object with the key \"hook\". DO NOT output anything else.\n"
             "Example response:\n"
             "{\"hook\": \"[TOM HANKS] MAKES A SHOCKING REVEAL ABOUT HIS PAST THAT NOBODY SAW COMING!\"}"
         )
@@ -130,7 +130,7 @@ def create_overlay_image(headline, output_img_path):
     
     # 2. Parse Text
     font_path = download_font()
-    text_font = ImageFont.truetype(font_path, 110)
+    text_font = ImageFont.truetype(font_path, 70)
     
     tokens = []
     current_word = ""
@@ -182,17 +182,40 @@ def create_overlay_image(headline, output_img_path):
             last_word, highlight = lines[-1][-1]
             lines[-1][-1] = (last_word + "...", highlight)
             
-    total_text_height = len(lines) * 120
+    total_text_height = len(lines) * 80
     
-    # 3. Draw Logo below the text
+    # 3. Draw Logo Image at Top Right
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        try:
+            logo_img = Image.open(logo_path).convert("RGBA")
+            # Scale logo to fit nicely in Top Right Corner
+            scale_w = 200 / logo_img.width
+            scale_h = 200 / logo_img.height
+            scale = min(scale_w, scale_h)
+            
+            new_w = int(logo_img.width * scale)
+            new_h = int(logo_img.height * scale)
+            logo_img = logo_img.resize((new_w, new_h), Image.LANCZOS)
+            
+            # Position at Top Right Corner
+            logo_y = 50
+            start_x = width - new_w - 50
+            
+            img.paste(logo_img, (int(start_x), int(logo_y)), logo_img)
+        except Exception as e:
+            print(f"Error drawing logo: {e}")
+            pass
+
+    # 4. Draw Logo Text below the main text
     logo_text = "CELEBRITY BUZZ USA"
-    logo_font = ImageFont.truetype(font_path, 50)
+    logo_font = ImageFont.truetype(font_path, 40)
     logo_w = draw.textlength(logo_text, font=logo_font)
     
-    # Calculate Y start so that text + logo sit nicely at the bottom
+    # Calculate Y start so that text + logo text sit nicely at the bottom
     # Bottom margin ~ 200px
-    total_content_height = total_text_height + 80 # 80 is logo height + gap
-    text_y_start = height - 200 - total_content_height
+    total_content_height = total_text_height + 60 # 60 is logo text height + gap
+    text_y_start = height - 250 - total_content_height
         
     # Draw Text
     for line in lines:
@@ -203,14 +226,14 @@ def create_overlay_image(headline, output_img_path):
             # Cyan for highlight, White for normal
             color = (0, 255, 255, 255) if is_highlight else (255, 255, 255, 255)
             # Draw text with black stroke
-            draw.text((x_pos, text_y_start), word, font=text_font, fill=color, stroke_width=6, stroke_fill=(0, 0, 0, 255))
+            draw.text((x_pos, text_y_start), word, font=text_font, fill=color, stroke_width=4, stroke_fill=(0, 0, 0, 255))
             x_pos += draw.textlength(word, font=text_font) + space_width
             
-        text_y_start += 120
+        text_y_start += 80
         
     # Draw Logo Text centered below main text
     logo_x = (width - logo_w) / 2
-    logo_y = text_y_start + 20
+    logo_y = text_y_start + 10
     draw.text((logo_x, logo_y), logo_text, font=logo_font, fill=(255, 255, 255, 255), stroke_width=3, stroke_fill=(0, 0, 0, 255))
         
     img.save(output_img_path)
