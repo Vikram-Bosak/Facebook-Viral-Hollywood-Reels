@@ -50,17 +50,31 @@ def main():
     description = report.get('description', 'N/A')
     fb_url = report.get('facebook_url', 'N/A')
     
+    # Determine YouTube Status
+    yt_url = report.get('youtube_url', 'N/A')
+    yt_status = "Success" if "youtube.com" in yt_url or "youtu.be" in yt_url else "Failed / N/A"
+    
+    # GitHub Action Variables
+    repo = os.environ.get('GITHUB_REPOSITORY', 'Vikram-Bosak/Facebook-Viral-Hollywood-Reels')
+    run_id = os.environ.get('GITHUB_RUN_ID', 'UNKNOWN')
+    repo_url = f"https://github.com/{repo}"
+    run_url = f"{repo_url}/actions/runs/{run_id}"
+    
     emoji_status = "✅" if upload_status == "Success" else "❌"
     
     message = (
         f"{emoji_status} <b>Pipeline Run Completed</b>\n\n"
-        f"🎬 <b>Video Name:</b> {video_name}\n\n"
+        f"🎬 <b>Video Name:</b>\n{video_name}\n\n"
         f"📥 <b>Download Status:</b> {download_status}\n"
         f"✂️ <b>Editing Status:</b> {editing_status}\n"
-        f"📤 <b>Upload Status:</b> {upload_status}\n\n"
-        f"🏷️ <b>SEO Title:</b> {seo_title}\n\n"
+        f"📤 <b>Facebook Upload Status:</b> {upload_status}\n"
+        f"📤 <b>YouTube Upload Status:</b> {yt_status}\n\n"
+        f"🏷️ <b>SEO Title:</b>\n{seo_title}\n\n"
         f"📝 <b>Description:</b>\n{description}\n\n"
-        f"🔗 <b>Facebook Reel URL:</b>\n{fb_url}"
+        f"🔗 <b>Facebook Reel URL:</b>\n{fb_url}\n\n"
+        f"▶️ <b>YouTube Video URL:</b>\n{yt_url}\n\n"
+        f"📦 <b>GitHub Repository:</b>\n{repo_url}\n\n"
+        f"📄 <b>Workflow Run:</b>\n{run_url}"
     )
     
     if "No new video" in download_status:
