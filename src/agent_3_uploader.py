@@ -7,8 +7,10 @@ from dotenv import load_dotenv
 # Ensure we can import existing modules
 try:
     from src.facebook_uploader import upload_reel
+    from src.youtube_uploader import upload_to_youtube
 except ImportError:
     from facebook_uploader import upload_reel
+    from youtube_uploader import upload_to_youtube
 
 load_dotenv()
 
@@ -58,10 +60,11 @@ def main():
     print(f"Waiting for {delay_minutes} minutes and {delay_seconds % 60} seconds before uploading to appear human...")
     time.sleep(delay_seconds)
 
+    # Facebook Upload
     try:
         print(f"Uploading to Facebook with caption: {fb_caption}")
         fb_url = upload_reel(edited_video_path, fb_caption)
-        print(f"Successfully uploaded: {fb_url}")
+        print(f"Successfully uploaded to Facebook: {fb_url}")
         
         report["upload_status"] = "Success"
         report["facebook_url"] = fb_url
@@ -69,6 +72,21 @@ def main():
         print(f"Failed to upload to Facebook: {e}")
         report["upload_status"] = "Failed"
         report["facebook_url"] = str(e)
+        
+    # YouTube Upload
+    if report.get("upload_status") == "Success":
+        try:
+            print("Waiting 2 minutes before uploading to YouTube Shorts...")
+            time.sleep(120)
+            
+            yt_title = title[:100] # YouTube title limit is 100 chars
+            yt_desc = f"{fb_caption}\n#shorts"
+            
+            yt_url = upload_to_youtube(edited_video_path, yt_title, yt_desc)
+            report["youtube_url"] = yt_url
+        except Exception as e:
+            print(f"Failed to upload to YouTube: {e}")
+            report["youtube_url"] = str(e)
         
     with open(report_path, 'w') as f:
         json.dump(report, f)
