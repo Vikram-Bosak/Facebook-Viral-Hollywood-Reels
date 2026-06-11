@@ -207,15 +207,9 @@ def create_overlay_image(headline, output_img_path):
             print(f"Error drawing logo: {e}")
             pass
 
-    # 4. Draw Logo Text below the main text
-    logo_text = "CELEBRITY BUZZ USA"
-    logo_font = ImageFont.truetype(font_path, 40)
-    logo_w = draw.textlength(logo_text, font=logo_font)
-    
-    # Calculate Y start so that text + logo text sit nicely at the bottom
-    # Bottom margin ~ 200px
-    total_content_height = total_text_height + 60 # 60 is logo text height + gap
-    text_y_start = height - 250 - total_content_height
+    # Calculate Y start so that text sits nicely at the bottom
+    # Bottom margin ~ 150px
+    text_y_start = height - 150 - total_text_height
         
     # Draw Text
     for line in lines:
@@ -231,10 +225,7 @@ def create_overlay_image(headline, output_img_path):
             
         text_y_start += 80
         
-    # Draw Logo Text centered below main text
-    logo_x = (width - logo_w) / 2
-    logo_y = text_y_start + 10
-    draw.text((logo_x, logo_y), logo_text, font=logo_font, fill=(255, 255, 255, 255), stroke_width=3, stroke_fill=(0, 0, 0, 255))
+    pass
         
     img.save(output_img_path)
 
