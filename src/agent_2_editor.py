@@ -29,8 +29,8 @@ def generate_headline(title):
         # Default simple parser if no AI
         words = title.split()
         if len(words) > 2:
-            return f"[{words[0]} {words[1]}] " + " ".join(words[2:])
-        return f"[{title}]"
+            return {"hook": f"{words[0]} {words[1]} " + " ".join(words[2:]) + " VIRAL", "highlights": ["VIRAL"]}
+        return {"hook": f"{title} VIRAL", "highlights": ["VIRAL"]}
         
     try:
         # Use Nvidia's base URL as requested
@@ -47,10 +47,10 @@ def generate_headline(title):
             "1. Length MUST be between 12 to 20 words.\n"
             "2. Make it highly engaging.\n"
             "3. ALL CAPS.\n"
-            "4. Names of celebrities/entities MUST be in brackets. Example: [BRAD PITT] MOVES ON!\n"
-            "5. Return EXACTLY a valid JSON object with the key \"hook\". DO NOT output anything else.\n"
+            "4. DO NOT use any brackets, parentheses, or special tags in the hook.\n"
+            "5. Return EXACTLY a valid JSON object with two keys: \"hook\" (the full text) and \"highlights\" (an array of 1-3 powerful words to color yellow).\n"
             "Example response:\n"
-            "{\"hook\": \"[TOM HANKS] MAKES A SHOCKING REVEAL ABOUT HIS PAST THAT NOBODY SAW COMING!\"}"
+            "{\"hook\": \"JENNIFER LOPEZ FACES SHOCKING NEW ALLEGATIONS THAT NOBODY SAW COMING!\", \"highlights\": [\"SHOCKING\", \"NEW\"]}"
         )
         
         response = client.chat.completions.create(
@@ -66,23 +66,21 @@ def generate_headline(title):
         
         # Try extracting JSON
         headline = ""
+        highlights = []
         import re
         json_match = re.search(r'\{.*?\}', raw_text, re.DOTALL)
         if json_match:
             try:
                 data = json.loads(json_match.group(0))
                 headline = data.get("hook", "")
+                highlights = data.get("highlights", [])
             except:
                 pass
                 
         if not headline:
             # Fallback parsing
             lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
-            for line in lines:
-                if '[' in line and ']' in line:
-                    headline = line
-                    break
-            if not headline and lines:
+            if lines:
                 headline = lines[-1]
             
         # Clean up characters
@@ -90,24 +88,20 @@ def generate_headline(title):
         
         # 1. Ensure ALL CAPS
         headline = headline.upper()
+        highlights = [h.upper().strip() for h in highlights]
         
         # 2. Limit words safely
         words = headline.split()
         if len(words) > 25:
             headline = " ".join(words[:25]) + "..."
                 
-        # Clean up dangling brackets if we cut them off
-        if headline.count('[') > headline.count(']'):
-            if not headline.endswith(']'):
-                headline += ']'
-                
         if not headline or "USER WANTS" in headline:
-            return f"[{title.upper()[:40]}] VIRAL NEWS!"
+            return {"hook": f"{title.upper()[:40]} VIRAL NEWS!", "highlights": ["VIRAL"]}
             
-        return headline
+        return {"hook": headline, "highlights": highlights}
     except Exception as e:
         print(f"AI Generation Error: {e}")
-        return f"[{title.upper()[:40]}] VIRAL NEWS!"
+        return {"hook": f"{title.upper()[:40]} VIRAL NEWS!", "highlights": ["VIRAL"]}
 
 def download_font():
     """Downloads a bold font if not exists"""
@@ -122,7 +116,7 @@ def download_font():
         print("Font downloaded.")
     return font_path
 
-def create_overlay_image(headline, output_img_path):
+def create_overlay_image(headline_data, output_img_path):
     """Generates a 1080x1920 transparent image with borders, text, and logo"""
     width, height = 1080, 1920
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0)) # Transparent
@@ -132,36 +126,27 @@ def create_overlay_image(headline, output_img_path):
     font_path = download_font()
     text_font = ImageFont.truetype(font_path, 70)
     
-    tokens = []
-    current_word = ""
-    in_bracket = False
-    for char in headline:
-        if char == '[':
-            if current_word:
-                tokens.append((current_word, in_bracket))
-                current_word = ""
-            in_bracket = True
-        elif char == ']':
-            if current_word:
-                tokens.append((current_word, in_bracket))
-                current_word = ""
-            in_bracket = False
-        else:
-            current_word += char
-    if current_word:
-        tokens.append((current_word, in_bracket))
+    hook_text = headline_data.get("hook", "").replace('\n', ' ')
+    highlights = headline_data.get("highlights", [])
+    
+    flat_words = []
+    for word in hook_text.split(' '):
+        if not word: continue
+        # Determine if this word should be highlighted
+        clean_word = "".join(c for c in word if c.isalnum()).upper()
+        is_highlight = False
+        for hw in highlights:
+            hw_clean = "".join(c for c in hw if c.isalnum()).upper()
+            if hw_clean and hw_clean == clean_word:
+                is_highlight = True
+                break
+        flat_words.append((word, is_highlight))
 
     lines = []
     current_line = []
     current_line_width = 0
     max_text_width = width - 100
     space_width = draw.textlength(" ", font=text_font)
-    
-    flat_words = []
-    for text, is_highlight in tokens:
-        text = text.replace('\n', ' ')
-        for word in text.split(' '):
-            if word: flat_words.append((word, is_highlight))
                 
     for word, is_highlight in flat_words:
         w = draw.textlength(word, font=text_font)
@@ -217,8 +202,8 @@ def create_overlay_image(headline, output_img_path):
         x_pos = (width - line_w) / 2
         
         for word, is_highlight in line:
-            # Cyan for highlight, White for normal
-            color = (0, 255, 255, 255) if is_highlight else (255, 255, 255, 255)
+            # Yellow for highlight, White for normal
+            color = (255, 255, 0, 255) if is_highlight else (255, 255, 255, 255)
             # Draw text with black stroke
             draw.text((x_pos, text_y_start), word, font=text_font, fill=color, stroke_width=4, stroke_fill=(0, 0, 0, 255))
             x_pos += draw.textlength(word, font=text_font) + space_width
@@ -300,15 +285,16 @@ def main():
     title = meta.get('title', 'Unknown Video')
     print(f"Processing video: {title}")
     
-    headline = generate_headline(title)
-    print(f"Generated Headline: {headline}")
+    headline_data = generate_headline(title)
+    headline_text = headline_data.get("hook", "")
+    print(f"Generated Headline: {headline_text}")
     
     # Save headline to meta for Uploader
-    meta['headline'] = headline
+    meta['headline'] = headline_text
     with open(meta_path, 'w') as f:
         json.dump(meta, f)
         
-    create_overlay_image(headline, overlay_path)
+    create_overlay_image(headline_data, overlay_path)
     
     report_path = "workspace/report.json"
     if os.path.exists(report_path):
@@ -317,7 +303,7 @@ def main():
     else:
         report = {}
         
-    report["seo_title"] = headline
+    report["seo_title"] = headline_text
     
     if edit_video(raw_video_path, overlay_path, edited_video_path):
         report["editing_status"] = "Success"
