@@ -97,14 +97,12 @@ def generate_headline(title):
             headline = " ".join(words[:25]) + "..."
                 
         if not headline or "USER WANTS" in headline:
-            fallback_title = title.upper()[:25]
-            return {"hook": f"THE TRUTH ABOUT {fallback_title}!", "highlights": []}
+            return {"hook": title.upper(), "highlights": []}
             
         return {"hook": headline, "highlights": highlights}
     except Exception as e:
         print(f"AI Generation Error: {e}")
-        fallback_title = title.upper()[:25]
-        return {"hook": f"THE TRUTH ABOUT {fallback_title}!", "highlights": []}
+        return {"hook": title.upper(), "highlights": []}
 
 def download_font():
     """Downloads a bold font if not exists"""
