@@ -41,16 +41,17 @@ def generate_headline(title):
         )
         
         prompt = (
-            f"Analyze the following Hollywood news title: '{title}'.\n"
-            "Create an irresistible, extremely engaging clickbait hook for a vertical video reel.\n"
+            f"Analyze this Hollywood news title: '{title}'.\n"
+            "Create a viral, curiosity-inducing clickbait hook for a short video reel.\n"
             "RULES:\n"
-            "1. Make it so suspenseful and captivating that viewers CANNOT scroll past.\n"
-            "2. Keep it punchy, between 8 to 15 words for maximum impact.\n"
-            "3. ALL CAPS.\n"
-            "4. DO NOT use any brackets, parentheses, or special tags.\n"
-            "5. Return EXACTLY a valid JSON object with one key: \"hook\" (the full text).\n"
+            "1. It MUST create intense suspense so viewers stop scrolling immediately.\n"
+            "2. Keep it VERY short and punchy (5 to 12 words max).\n"
+            "3. Use powerful hook words (e.g., 'SHOCKING', 'FINALLY', 'THE TRUTH ABOUT', 'NOBODY EXPECTED').\n"
+            "4. ALL CAPS.\n"
+            "5. NO brackets, NO parentheses, NO special tags.\n"
+            "6. Return EXACTLY a valid JSON object with one key: \"hook\" (the full text).\n"
             "Example response:\n"
-            "{\"hook\": \"THE SHOCKING TRUTH ABOUT JENNIFER LOPEZ NOBODY SAW COMING!\"}"
+            "{\"hook\": \"THE SHOCKING TRUTH THEY TRIED TO HIDE!\"}"
         )
         
         response = client.chat.completions.create(
@@ -96,12 +97,14 @@ def generate_headline(title):
             headline = " ".join(words[:25]) + "..."
                 
         if not headline or "USER WANTS" in headline:
-            return {"hook": f"{title.upper()[:40]} VIRAL NEWS!", "highlights": ["VIRAL"]}
+            fallback_title = title.upper()[:25]
+            return {"hook": f"THE TRUTH ABOUT {fallback_title}!", "highlights": []}
             
         return {"hook": headline, "highlights": highlights}
     except Exception as e:
         print(f"AI Generation Error: {e}")
-        return {"hook": f"{title.upper()[:40]} VIRAL NEWS!", "highlights": ["VIRAL"]}
+        fallback_title = title.upper()[:25]
+        return {"hook": f"THE TRUTH ABOUT {fallback_title}!", "highlights": []}
 
 def download_font():
     """Downloads a bold font if not exists"""
