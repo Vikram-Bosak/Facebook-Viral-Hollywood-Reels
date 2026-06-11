@@ -128,10 +128,6 @@ def create_overlay_image(headline, output_img_path):
     img = Image.new('RGBA', (width, height), (0, 0, 0, 0)) # Transparent
     draw = ImageDraw.Draw(img)
     
-    # 1. Draw double borders (Yellow outer, White inner)
-    draw.rectangle([10, 10, 1070, 1910], outline="yellow", width=10)
-    draw.rectangle([25, 25, 1055, 1895], outline="white", width=5)
-
     # 2. Parse Text
     font_path = download_font()
     text_font = ImageFont.truetype(font_path, 110)
@@ -180,63 +176,23 @@ def create_overlay_image(headline, output_img_path):
     if current_line:
         lines.append(current_line)
         
-    # Strictly limit to 5 lines so it NEVER spills out of the black bar
     if len(lines) > 5:
         lines = lines[:5]
         if lines[-1]:
             last_word, highlight = lines[-1][-1]
             lines[-1][-1] = (last_word + "...", highlight)
-        
-    # 3. Draw Logo below the video area
-    logo_path = "assets/logo.png"
-    
-    logo_w, logo_h = 0, 0
-    logo_img = None
-    logo_y = 1250 # Default if no logo
-    if os.path.exists(logo_path):
-        try:
-            logo_img = Image.open(logo_path).convert("RGBA")
-            # Scale logo to fit nicely in Top Right Corner
-            scale_w = 250 / logo_img.width
-            scale_h = 250 / logo_img.height
-            scale = min(scale_w, scale_h)
             
-            new_w = int(logo_img.width * scale)
-            new_h = int(logo_img.height * scale)
-            logo_img = logo_img.resize((new_w, new_h), Image.LANCZOS)
-            logo_w, logo_h = logo_img.size
-            
-            # Position at Top Right Corner
-            logo_y = 50
-            start_x = width - logo_w - 50
-            
-            img.paste(logo_img, (int(start_x), int(logo_y)), logo_img)
-        except Exception as e:
-            print(f"Error drawing logo: {e}")
-            pass
-    else:
-        # Fallback to Text Logo
-        logo_text = "CELEBRITY BUZZ USA"
-        logo_font = ImageFont.truetype(font_path, 40)
-        logo_w = draw.textlength(logo_text, font=logo_font)
-        logo_h = 50 # Approximate height
-        logo_y = 50
-        start_x = width - logo_w - 70
-        # Draw background pill for text
-        padding = 15
-        draw.rounded_rectangle(
-            [start_x - padding, logo_y - padding, start_x + logo_w + padding, logo_y + logo_h + padding],
-            radius=15, fill="red"
-        )
-        draw.text((start_x, logo_y), logo_text, font=logo_font, fill="white")
-        logo_img = True # Just to indicate it exists
-            
-    # Calculate layout Y positions for text (logo is at top right, so it doesn't affect text)
-    available_start = 1280
-        
-    available_space = height - available_start
     total_text_height = len(lines) * 120
-    text_y_start = available_start + (available_space - total_text_height) // 2
+    
+    # 3. Draw Logo below the text
+    logo_text = "CELEBRITY BUZZ USA"
+    logo_font = ImageFont.truetype(font_path, 50)
+    logo_w = draw.textlength(logo_text, font=logo_font)
+    
+    # Calculate Y start so that text + logo sit nicely at the bottom
+    # Bottom margin ~ 200px
+    total_content_height = total_text_height + 80 # 80 is logo height + gap
+    text_y_start = height - 200 - total_content_height
         
     # Draw Text
     for line in lines:
@@ -244,12 +200,18 @@ def create_overlay_image(headline, output_img_path):
         x_pos = (width - line_w) / 2
         
         for word, is_highlight in line:
-            color = (255, 255, 0, 255) if is_highlight else (255, 255, 255, 255) # Yellow highlight
-            # Draw text without shadow as background is black
-            draw.text((x_pos, text_y_start), word, font=text_font, fill=color)
+            # Cyan for highlight, White for normal
+            color = (0, 255, 255, 255) if is_highlight else (255, 255, 255, 255)
+            # Draw text with black stroke
+            draw.text((x_pos, text_y_start), word, font=text_font, fill=color, stroke_width=6, stroke_fill=(0, 0, 0, 255))
             x_pos += draw.textlength(word, font=text_font) + space_width
             
         text_y_start += 120
+        
+    # Draw Logo Text centered below main text
+    logo_x = (width - logo_w) / 2
+    logo_y = text_y_start + 20
+    draw.text((logo_x, logo_y), logo_text, font=logo_font, fill=(255, 255, 255, 255), stroke_width=3, stroke_fill=(0, 0, 0, 255))
         
     img.save(output_img_path)
 
@@ -265,8 +227,8 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
     """Composites the raw video onto a 1080x1920 black background and applies the transparent overlay"""
     print("Compositing video...")
     try:
-        # Base black canvas
-        base = ffmpeg.input('color=c=black:s=1080x1920', f='lavfi') # Removed t=1
+        # Base black canvas (optional now since we are full screen, but good for safety)
+        base = ffmpeg.input('color=c=black:s=1080x1920', f='lavfi')
         
         # Raw video
         vid = ffmpeg.input(input_vid_path)
@@ -274,13 +236,13 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         # Overlay image
         overlay = ffmpeg.input(overlay_img_path)
         
-        # Scale and crop the video to 1020x1250 to fit exactly inside the white border
-        scaled_vid = vid.video.filter('scale', 1020, 1250, force_original_aspect_ratio='increase').filter('crop', 1020, 1250)
+        # Scale and crop the video to 1080x1920 to fit exactly inside full screen
+        scaled_vid = vid.video.filter('scale', 1080, 1920, force_original_aspect_ratio='increase').filter('crop', 1080, 1920)
         
-        # First overlay the scaled video onto the black base at x=30, y=30
-        vid_on_base = ffmpeg.overlay(base, scaled_vid, x=30, y=30, shortest=1)
+        # Overlay the scaled video onto the base
+        vid_on_base = ffmpeg.overlay(base, scaled_vid, x=0, y=0, shortest=1)
         
-        # Then overlay the transparent Pillow image (borders, logo, text) on top
+        # Then overlay the transparent Pillow image (text) on top
         final = ffmpeg.overlay(vid_on_base, overlay, x=0, y=0)
         
         # Output with audio (limited to 58 seconds for Reels)
