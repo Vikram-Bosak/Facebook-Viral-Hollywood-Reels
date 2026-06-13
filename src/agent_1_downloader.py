@@ -62,24 +62,42 @@ async def search_and_download_latest_video():
                     if "<video" in html or "playback" in html:
                         # 2. Extract timestamp
                         time_element = await article.query_selector("time")
-                        if not time_element:
-                            continue
-                        datetime_str = await time_element.get_attribute("datetime")
-                        if not datetime_str:
-                            continue
-                            
-                        try:
-                            # Twitter datetime format: "2026-06-13T12:00:00.000Z"
-                            post_time = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
-                        except ValueError:
-                            continue
-                            
-                        print(f"Found video post at {post_time.isoformat()}")
+                        is_within_4_hours = False
                         
+                        if time_element:
+                            datetime_str = await time_element.get_attribute("datetime")
+                            if datetime_str:
+                                try:
+                                    post_time = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+                                    if post_time >= time_limit:
+                                        is_within_4_hours = True
+                                        print(f"Found video post at {post_time.isoformat()}")
+                                except ValueError:
+                                    pass
+                        
+                        if not is_within_4_hours:
+                            # Fallback: check status link texts for relative times like "34m", "2h"
+                            status_links = await article.query_selector_all("a[href*='/status/']")
+                            for sl in status_links:
+                                txt = await sl.inner_text()
+                                txt = txt.strip()
+                                if txt.endswith('m') and txt[:-1].isdigit():
+                                    is_within_4_hours = True
+                                    print(f"Found recent post via relative time: {txt}")
+                                    break
+                                elif txt.endswith('h') and txt[:-1].isdigit():
+                                    if int(txt[:-1]) <= 4:
+                                        is_within_4_hours = True
+                                        print(f"Found recent post via relative time: {txt}")
+                                        break
+                                elif txt.endswith('s') and txt[:-1].isdigit():
+                                    is_within_4_hours = True
+                                    print(f"Found recent post via relative time: {txt}")
+                                    break
+                                    
                         # 3. Check 4-hour window
-                        if post_time < time_limit:
-                            print(f"Post is older than 4 hours. Skipping.")
-                            # We continue because pinned tweets can be older, but newer tweets might follow.
+                        if not is_within_4_hours:
+                            print("Post is older than 4 hours or timestamp unknown. Skipping.")
                             continue
                             
                         # 4. Extract link and download
