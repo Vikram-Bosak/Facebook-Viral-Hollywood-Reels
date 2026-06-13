@@ -1,19 +1,13 @@
 import os
-import sys
-import cloudscraper
-import requests
 import json
-import uuid
-import re
-from bs4 import BeautifulSoup
+import asyncio
+from datetime import datetime, timezone, timedelta
+from playwright.async_api import async_playwright
+import yt_dlp
 from dotenv import load_dotenv
-from datetime import datetime
 
 load_dotenv()
-
 HISTORY_FILE = 'downloaded_history.txt'
-
-
 
 def load_history():
     if os.path.exists(HISTORY_FILE):
@@ -25,133 +19,144 @@ def save_to_history(video_id):
     with open(HISTORY_FILE, 'a') as f:
         f.write(f"{video_id}\n")
 
-def get_video_from_people_article(scraper, url):
-    try:
-        html = scraper.get(url).text
-        soup = BeautifulSoup(html, 'html.parser')
-        scripts = soup.find_all('script', type='application/ld+json')
-        
-        for s in scripts:
-            try:
-                data = json.loads(s.string)
-                # Handle both list of schemas and single schema
-                items = data if isinstance(data, list) else [data]
-                
-                for item in items:
-                    if item.get('@type') == 'VideoObject':
-                        video_url = item.get('contentUrl')
-                        title = item.get('name', 'People Video')
-                        # generate a safe ID
-                        video_id = str(uuid.uuid5(uuid.NAMESPACE_URL, url))
-                        if video_url:
-                            return video_url, title, video_id
-            except:
-                pass
-    except Exception as e:
-        print(f"Error extracting video from {url}: {e}")
-    return None, None, None
-
-def search_and_download_latest_video():
-    """Searches People.com RSS feed for the latest video article and downloads it"""
-    print("Fetching RSS feed for latest videos...")
-    import xml.etree.ElementTree as ET
-    scraper = cloudscraper.create_scraper()
+async def search_and_download_latest_video():
+    print("Searching Twitter (X) for new videos posted in the last 4 hours...")
     
-    try:
-        rss_url = "https://rss.app/feeds/TevFqDIlvlfHryLT.xml"
-        xml_data = scraper.get(rss_url).text
-        root = ET.fromstring(xml_data)
-    except Exception as e:
-        print(f"Failed to fetch RSS feed: {e}")
-        return None, None, None, None
-        
+    profiles = [
+        "https://x.com/THR",
+        "https://x.com/enews",
+        "https://x.com/Variety",
+        "https://x.com/FilmUpdates"
+    ]
+    
     history = load_history()
     
-    # Find article links
-    unique_links = []
-    for item in root.findall('.//item'):
-        link = item.find('link')
-        if link is not None and link.text:
-            href = link.text.strip()
-            if 'people.com' in href and href not in unique_links:
-                unique_links.append(href)
-            
-    print(f"Found {len(unique_links)} potential video articles from RSS.")
+    ydl_opts_download = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': 'workspace/raw_video.mp4',
+        'quiet': False
+    }
     
-    for article_url in unique_links:
-        video_url, title, video_id = get_video_from_people_article(scraper, article_url)
-        if not video_url:
-            continue
-            
-        if video_id in history:
-            print(f"Video {video_id} already downloaded. Skipping...")
-            continue
-            
-        print(f"Selected video: {title} from {article_url}")
-        print(f"Download URL: {video_url}")
+    time_limit = datetime.now(timezone.utc) - timedelta(hours=4)
+    print(f"Time limit is set to: {time_limit.isoformat()}")
+    
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(viewport={'width': 1920, 'height': 1080})
+        page = await context.new_page()
         
-        # Download the video
-        os.makedirs('workspace', exist_ok=True)
-        filename = f"workspace/raw_video.mp4"
+        for profile in profiles:
+            print(f"--------------------------------------------------")
+            print(f"Checking profile: {profile}")
+            try:
+                await page.goto(profile, timeout=30000)
+                await page.wait_for_selector("article", timeout=15000)
+                await page.wait_for_timeout(3000) # Wait for videos to load
+                
+                # Fetch articles
+                articles = await page.query_selector_all("article")
+                for article in articles:
+                    html = await article.inner_html()
+                    
+                    # 1. Check if it's a video
+                    if "<video" in html or "playback" in html:
+                        # 2. Extract timestamp
+                        time_element = await article.query_selector("time")
+                        if not time_element:
+                            continue
+                        datetime_str = await time_element.get_attribute("datetime")
+                        if not datetime_str:
+                            continue
+                            
+                        try:
+                            # Twitter datetime format: "2026-06-13T12:00:00.000Z"
+                            post_time = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+                        except ValueError:
+                            continue
+                            
+                        print(f"Found video post at {post_time.isoformat()}")
+                        
+                        # 3. Check 4-hour window
+                        if post_time < time_limit:
+                            print(f"Post is older than 4 hours. Skipping.")
+                            # We continue because pinned tweets can be older, but newer tweets might follow.
+                            continue
+                            
+                        # 4. Extract link and download
+                        links = await article.query_selector_all("a[href*='/status/']")
+                        for link in links:
+                            href = await link.get_attribute("href")
+                            if href and "/status/" in href and "photo" not in href:
+                                tweet_url = f"https://x.com{href}" if href.startswith("/") else href
+                                tweet_id = tweet_url.split("/status/")[1].split("/")[0].split("?")[0]
+                                
+                                if tweet_id in history:
+                                    print(f"Video {tweet_id} already in history, skipping...")
+                                    break
+                                    
+                                print(f"Selected valid video within 4 hours: {tweet_url}")
+                                
+                                # Use yt-dlp to download it
+                                try:
+                                    os.makedirs('workspace', exist_ok=True)
+                                    filename = "workspace/raw_video.mp4"
+                                    if os.path.exists(filename):
+                                        os.remove(filename)
+                                        
+                                    print(f"Downloading with yt-dlp...")
+                                    with yt_dlp.YoutubeDL(ydl_opts_download) as ydl:
+                                        info = ydl.extract_info(tweet_url, download=True)
+                                        title = info.get('title', f"Twitter Video {tweet_id}")
+                                        
+                                    meta = {
+                                        "title": title,
+                                        "source_url": tweet_url,
+                                        "video_id": tweet_id
+                                    }
+                                    with open("workspace/meta.json", "w") as f:
+                                        json.dump(meta, f)
+                                        
+                                    await browser.close()
+                                    return filename, title, tweet_id, tweet_url, tweet_url
+                                    
+                                except Exception as e:
+                                    print(f"Error downloading {tweet_url}: {e}")
+                                    # Try next article
+                                    pass
+            except Exception as e:
+                print(f"Error checking profile {profile}: {e}")
+                
+        await browser.close()
         
-        # Save metadata
-        meta = {
-            "title": title,
-            "source_url": article_url,
-            "video_id": video_id
-        }
-        with open("workspace/meta.json", "w") as f:
-            json.dump(meta, f)
-        
-        try:
-            print(f"Downloading {filename}...")
-            response = requests.get(video_url, stream=True)
-            if response.status_code == 200:
-                with open(filename, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=1024*1024):
-                        if chunk:
-                            f.write(chunk)
-                print("Download complete.")
-                return filename, title, video_id, article_url, video_url
-            else:
-                print(f"Failed to download video file. Status code: {response.status_code}")
-        except Exception as e:
-            print(f"Error downloading video: {e}")
-            
-    print("No new valid videos found.")
+    print("--------------------------------------------------")
+    print("No new valid videos found across all profiles within the last 4 hours.")
     return None, None, None, None, None
 
-def main():
-    print("Starting Agent 1: People.com Downloader")
-    
+def run_downloader():
+    print("Starting Agent 1: X (Twitter) Downloader")
     os.makedirs('workspace', exist_ok=True)
-    report = {
-        "video_name": "N/A",
-        "download_status": "Failed / No new video",
-        "editing_status": "N/A",
-        "upload_status": "N/A",
-        "seo_title": "N/A",
-        "description": "N/A",
-        "facebook_url": "N/A"
-    }
-    with open('workspace/report.json', 'w') as f:
-        json.dump(report, f)
-
-    result = search_and_download_latest_video()
-    if result and len(result) == 5:
-        video_path, title, video_id, source_url, video_url = result
-    else:
-        video_path, title, video_id, source_url, video_url = None, None, None, None, None
     
-    if video_path and os.path.exists(video_path):
-        save_to_history(video_id)
-        report["video_name"] = title
-        report["download_status"] = "Success"
-        with open('workspace/report.json', 'w') as f:
-            json.dump(report, f)
-        print("Agent 1 completed successfully.")
+    result = asyncio.run(search_and_download_latest_video())
+    if result and len(result) == 5:
+        video_path, title, tweet_id, source_url, video_url = result
     else:
-        print("No video downloaded.")
+        video_path, title, tweet_id, source_url, video_url = None, None, None, None, None
+        
+    if video_path and os.path.exists(video_path):
+        save_to_history(tweet_id)
+        video_data = {
+            "id": tweet_id,
+            "tweet_id": tweet_id,
+            "title": title,
+            "source_url": source_url,
+            "local_path": video_path,
+            "status": "DOWNLOADED"
+        }
+        print("Agent 1 completed successfully.")
+        return video_data
+    
+    print("No video downloaded.")
+    return None
 
 if __name__ == "__main__":
-    main()
+    run_downloader()

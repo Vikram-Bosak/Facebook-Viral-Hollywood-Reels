@@ -20,3 +20,8 @@ venv/
 .DS_Store
 Thumbs.db
 downloads/
+
+workspace/
+auth_venv/
+client_secrets.json
+youtube_token.json

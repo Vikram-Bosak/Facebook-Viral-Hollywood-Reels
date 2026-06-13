@@ -283,57 +283,40 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         print(f"Error during video editing: {e}")
         return False
 
-def main():
+def process_video(video_data):
     print("Starting Agent 2: Video Editor")
     
-    raw_video_path = "workspace/raw_video.mp4"
-    meta_path = "workspace/meta.json"
+    raw_video_path = video_data.get('local_path', "workspace/raw_video.mp4")
+    title = video_data.get('title', 'Unknown Video')
     overlay_path = "workspace/overlay.png"
-    edited_video_path = "workspace/edited_video.mp4"
+    edited_video_path = f"workspace/edited_{video_data.get('id', 'video')}.mp4"
     
-    if not os.path.exists(raw_video_path) or not os.path.exists(meta_path):
-        print("No raw video or meta.json found in workspace.")
-        return
+    if not os.path.exists(raw_video_path):
+        print(f"Raw video not found at {raw_video_path}.")
+        video_data["editing_status"] = "Failed"
+        return video_data
         
-    with open(meta_path, 'r') as f:
-        meta = json.load(f)
-        
-    title = meta.get('title', 'Unknown Video')
     print(f"Processing video: {title}")
     
     headline_data = generate_headline(title)
     headline_text = headline_data.get("hook", "")
     print(f"Generated Headline: {headline_text}")
     
-    # Save headline to meta for Uploader
-    meta['headline'] = headline_text
-    with open(meta_path, 'w') as f:
-        json.dump(meta, f)
-        
     create_overlay_image(headline_data, overlay_path)
     
-    report_path = "workspace/report.json"
-    if os.path.exists(report_path):
-        with open(report_path, 'r') as f:
-            report = json.load(f)
-    else:
-        report = {}
-        
-    report["seo_title"] = headline_text
-    
     if edit_video(raw_video_path, overlay_path, edited_video_path):
-        report["editing_status"] = "Success"
-        with open(report_path, 'w') as f:
-            json.dump(report, f)
+        video_data["editing_status"] = "Success"
+        video_data["seo_title"] = headline_text
+        video_data["edited_path"] = edited_video_path
         
         # Cleanup intermediate files
         if os.path.exists(raw_video_path): os.remove(raw_video_path)
         if os.path.exists(overlay_path): os.remove(overlay_path)
+        return video_data
     else:
-        report["editing_status"] = "Failed"
-        with open(report_path, 'w') as f:
-            json.dump(report, f)
+        video_data["editing_status"] = "Failed"
         print("Editing failed.")
+        return video_data
 
 if __name__ == "__main__":
-    main()
+    pass

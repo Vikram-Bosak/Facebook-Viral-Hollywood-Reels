@@ -9,3 +9,5 @@ cloudscraper
 beautifulsoup4
 python-telegram-bot
 Pillow
+yt-dlp
+playwright
