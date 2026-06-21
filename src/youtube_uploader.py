@@ -48,7 +48,7 @@ def upload_to_youtube(video_path, title, description):
     insert_request = youtube.videos().insert(
         part=','.join(body.keys()),
         body=body,
-        media_body=MediaFileUpload(video_path, chunksize=-1, resumable=True)
+        media_body=MediaFileUpload(video_path, chunksize=1024*1024, resumable=True)
     )
     
     print("Uploading video to YouTube Shorts...")
