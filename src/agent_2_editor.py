@@ -242,11 +242,44 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
     """Composites the raw video onto a 1080x1920 black background and applies the transparent overlay"""
     print("Compositing video...")
     try:
+        # Check source duration — if under 20s, we'll loop it
+        source_duration = get_video_duration(input_vid_path)
+        print(f"Source video duration: {source_duration:.2f} seconds")
+
+        needs_loop = source_duration < 20
+
+        if needs_loop:
+            # Calculate how many loops needed to reach at least 20 seconds
+            import math
+            loop_count = math.ceil(20 / source_duration)
+            print(f"Video too short ({source_duration:.1f}s), looping {loop_count}x to reach 20+ seconds")
+
+            # Stream-loop the video N times, capped at 59s
+            temp_looped = "workspace/looped_input.mp4"
+            loop_cmd = (
+                ffmpeg
+                .input(input_vid_path, stream_loop=loop_count - 1)
+                .output(
+                    temp_looped,
+                    vcodec='libx264',
+                    acodec='aac',
+                    crf=28,
+                    preset='fast',
+                    t=59,  # cap at 59s so we don't overshoot
+                )
+            )
+            ffmpeg.run(loop_cmd, overwrite_output=True, quiet=True)
+            looped_duration = get_video_duration(temp_looped)
+            print(f"Looped video duration: {looped_duration:.2f} seconds")
+            working_video = temp_looped
+        else:
+            working_video = input_vid_path
+
         # Base black canvas (optional now since we are full screen, but good for safety)
         base = ffmpeg.input('color=c=black:s=1080x1920', f='lavfi')
         
-        # Raw video
-        vid = ffmpeg.input(input_vid_path)
+        # Raw video (or looped version)
+        vid = ffmpeg.input(working_video)
         
         # Overlay image
         overlay = ffmpeg.input(overlay_img_path)
@@ -268,6 +301,10 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         
         duration = get_video_duration(output_vid_path)
         print(f"Final video duration: {duration:.2f} seconds")
+        
+        # Cleanup looped temp file
+        if needs_loop and os.path.exists("workspace/looped_input.mp4"):
+            os.remove("workspace/looped_input.mp4")
         
         if duration < 20:
             print("Validation Failed: Video is under 20 seconds.")
