@@ -242,11 +242,37 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
     """Composites the raw video onto a 1080x1920 black background and applies the transparent overlay"""
     print("Compositing video...")
     try:
+        import math
+        source_duration = get_video_duration(input_vid_path)
+        print(f"Source video duration: {source_duration:.2f} seconds")
+
+        # Loop short videos to reach 59 seconds
+        needs_loop = source_duration < 59
+
+        if needs_loop:
+            loop_count = math.ceil(59 / source_duration)
+            print(f"Video is {source_duration:.1f}s — looping {loop_count}x to fill 59s")
+            temp_looped = "workspace/looped_input.mp4"
+            loop_cmd = (
+                ffmpeg
+                .input(input_vid_path, stream_loop=loop_count - 1)
+                .output(
+                    temp_looped,
+                    vcodec='libx264', acodec='aac',
+                    crf=28, preset='fast', t=59,
+                )
+            )
+            ffmpeg.run(loop_cmd, overwrite_output=True, quiet=True)
+            print(f"Looped video duration: {get_video_duration(temp_looped):.2f} seconds")
+            working_video = temp_looped
+        else:
+            working_video = input_vid_path
+
         # Base black canvas (optional now since we are full screen, but good for safety)
         base = ffmpeg.input('color=c=black:s=1080x1920', f='lavfi')
         
-        # Raw video
-        vid = ffmpeg.input(input_vid_path)
+        # Raw video (or looped version)
+        vid = ffmpeg.input(working_video)
         
         # Overlay image
         overlay = ffmpeg.input(overlay_img_path)
@@ -261,7 +287,7 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         final = ffmpeg.overlay(vid_on_base, overlay, x=0, y=0)
         
         # Output with audio (limited to 58 seconds for Reels)
-        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=58, shortest=None, crf=28, preset='fast')
+        out = ffmpeg.output(final, vid.audio, output_vid_path, vcodec='libx264', acodec='aac', t=59, shortest=None, crf=28, preset='fast')
         
         ffmpeg.run(out, overwrite_output=True, quiet=True)
         print("Video editing completed.")
@@ -269,10 +295,9 @@ def edit_video(input_vid_path, overlay_img_path, output_vid_path):
         duration = get_video_duration(output_vid_path)
         print(f"Final video duration: {duration:.2f} seconds")
 
-        if duration > 59:
-            print("Validation Failed: Video is over 59 seconds.")
-            if os.path.exists(output_vid_path): os.remove(output_vid_path)
-            return False
+        # Cleanup looped temp file
+        if needs_loop and os.path.exists("workspace/looped_input.mp4"):
+            os.remove("workspace/looped_input.mp4")
             
         return True
     except Exception as e:
