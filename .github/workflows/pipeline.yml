@@ -5,18 +5,18 @@ on:
     branches:
       - main
   schedule:
-    # Trigger 6 times a day (every 4 hours)
-    # UTC Equivalent: 00:00, 04:00, 08:00, 12:00, 16:00, 20:00
-    - cron: '0 0,4,8,12,16,20 * * *'
+    # 4 runs/day instead of 6 — each run now processes UP TO 5 videos
+    # UTC 02:00, 08:00, 14:00, 20:00
+    - cron: '0 2,8,14,20 * * *'
   workflow_dispatch:
 
 jobs:
   run-pipeline:
-    name: End-to-End Hollywood Pipeline
+    name: Multi-Video Hollywood Pipeline
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    # Optional: Prevent concurrent runs of the workflow
+    # Prevent concurrent runs — queue instead of cancel
     concurrency:
       group: hollywood-pipeline
       cancel-in-progress: false
@@ -41,7 +41,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: 🚀 Step 1 - Run Hollywood Pipeline Orchestrator (main_agent.py)
+      - name: 🚀 Run Multi-Video Pipeline (up to 5 videos per run)
         id: main_agent
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -51,10 +51,10 @@ jobs:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
         run: |
-          echo "Starting Main Agent..."
+          echo "Starting Multi-Video Pipeline..."
           python main_agent.py
 
-      - name: 💾 Commit updated files (like history and archive)
+      - name: 💾 Commit updated files (history)
         if: always()
         run: |
           git config --global user.name 'github-actions[bot]'
