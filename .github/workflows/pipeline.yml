@@ -1,4 +1,4 @@
-name: Hollywood Reels Automated Pipeline
+name: Facebook Viral Hollywood Reels
 
 on:
   push:
