@@ -18,7 +18,7 @@ from src.common.telegram import (
 )
 
 # ─── Config ───
-VIDEOS_PER_RUN = 5  # Target: try to process up to 5 videos per run
+VIDEOS_PER_RUN = 1  # 1 video per run to avoid Facebook rate limits
 
 
 def run_single_video(video_data, video_number, total):
@@ -57,11 +57,11 @@ def run_single_video(video_data, video_number, total):
 
 def run_multi_sequence():
     """
-    Main pipeline: download multiple videos and process each one.
-    Target: up to VIDEOS_PER_RUN videos per GitHub Actions run.
+    Main pipeline: download videos and process each one.
+    Target: VIDEOS_PER_RUN videos per GitHub Actions run.
     """
     print(f"\n{'#'*60}")
-    print(f"  STARTING MULTI-VIDEO PIPELINE (target: {VIDEOS_PER_RUN} videos)")
+    print(f"  STARTING PIPELINE (target: {VIDEOS_PER_RUN} video per run)")
     print(f"{'#'*60}\n")
 
     # Step 1: Batch download — get up to VIDEOS_PER_RUN videos at once

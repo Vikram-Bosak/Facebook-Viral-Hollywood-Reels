@@ -5,7 +5,7 @@ on:
     branches:
       - main
   schedule:
-    # 4 runs/day instead of 6 — each run now processes UP TO 5 videos
+    # 4 runs/day — 1 video per run = 4 reels/day to avoid rate limits
     # UTC 02:00, 08:00, 14:00, 20:00
     - cron: '0 2,8,14,20 * * *'
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: 🚀 Run Multi-Video Pipeline (up to 5 videos per run)
+      - name: 🚀 Run Pipeline (1 video per run)
         id: main_agent
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -51,7 +51,7 @@ jobs:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
         run: |
-          echo "Starting Multi-Video Pipeline..."
+          echo "Starting Pipeline (1 video per run)..."
           python main_agent.py
 
       - name: 💾 Commit updated files (history)
