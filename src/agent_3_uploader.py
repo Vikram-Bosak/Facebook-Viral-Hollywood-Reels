@@ -40,34 +40,51 @@ def run_upload(video_data):
     print(f"Waiting for {delay_seconds} seconds before uploading...")
     time.sleep(delay_seconds)
 
+    # Attempt Facebook token auto-refresh before uploading
+    try:
+        from src.facebook_uploader import refresh_token
+        print("Attempting Facebook token auto-refresh...")
+        refresh_token()
+        print("Facebook token refreshed successfully.")
+    except Exception as e:
+        print(f"Facebook token refresh skipped or failed: {e}")
+
     # Facebook Upload
+    fb_success = False
     try:
         print(f"Uploading to Facebook with caption: {fb_caption}")
         fb_url = upload_reel(edited_video_path, fb_caption)
         print(f"Successfully uploaded to Facebook: {fb_url}")
         
-        video_data["upload_status"] = "Success"
         video_data["fb_url"] = fb_url
+        fb_success = True
     except Exception as e:
         print(f"Failed to upload to Facebook: {e}")
-        video_data["upload_status"] = "Failed"
         video_data["fb_err"] = str(e)
         
-    # YouTube Upload
-    if video_data.get("upload_status") == "Success":
-        try:
-            print("Waiting 2 seconds before uploading to YouTube Shorts...")
-            time.sleep(2)
-            
-            yt_title = title[:100] # YouTube title limit is 100 chars
-            yt_desc = f"{fb_caption}\n#shorts"
-            
-            yt_url = upload_to_youtube(edited_video_path, yt_title, yt_desc)
-            video_data["yt_url"] = yt_url
-        except Exception as e:
-            print(f"Failed to upload to YouTube: {e}")
-            video_data["yt_err"] = str(e)
+    # YouTube Upload (independent of Facebook — always attempt)
+    yt_success = False
+    try:
+        print("Waiting 2 seconds before uploading to YouTube Shorts...")
+        time.sleep(2)
         
+        yt_title = title[:100]  # YouTube title limit is 100 chars
+        yt_desc = f"{fb_caption}\n#shorts"
+        
+        yt_url = upload_to_youtube(edited_video_path, yt_title, yt_desc)
+        print(f"Successfully uploaded to YouTube: {yt_url}")
+        video_data["yt_url"] = yt_url
+        yt_success = True
+    except Exception as e:
+        print(f"Failed to upload to YouTube: {e}")
+        video_data["yt_err"] = str(e)
+
+    # Set overall upload status: success if EITHER platform succeeded
+    if fb_success or yt_success:
+        video_data["upload_status"] = "Success"
+    else:
+        video_data["upload_status"] = "Failed"
+
     # Cleanup
     if os.path.exists(edited_video_path):
         os.remove(edited_video_path)
