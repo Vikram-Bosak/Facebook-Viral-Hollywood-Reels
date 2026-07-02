@@ -15,7 +15,7 @@ except ImportError:
 load_dotenv()
 
 def run_upload(video_data):
-    print("Starting Agent 3: Facebook Uploader")
+    print("Starting Agent 3: Facebook + YouTube Uploader")
     
     edited_video_path = video_data.get('edited_path')
     title = video_data.get('title', 'Unknown Video')
@@ -36,26 +36,19 @@ def run_upload(video_data):
     fb_caption = f"{headline}\n\n#hollywood #viral #entertainment\n\nOriginal Title: {title}\nSource: {source_url}"
     video_data["description"] = fb_caption
 
-    delay_seconds = 2
+    # Human-like delay before uploading (15 seconds to 2 minutes)
+    delay_seconds = random.randint(15, 120)
     print(f"Waiting for {delay_seconds} seconds before uploading...")
     time.sleep(delay_seconds)
 
-    # Attempt Facebook token auto-refresh before uploading
-    try:
-        from src.facebook_uploader import refresh_token
-        print("Attempting Facebook token auto-refresh...")
-        refresh_token()
-        print("Facebook token refreshed successfully.")
-    except Exception as e:
-        print(f"Facebook token refresh skipped or failed: {e}")
+    fb_success = False
+    yt_success = False
 
     # Facebook Upload
-    fb_success = False
     try:
         print(f"Uploading to Facebook with caption: {fb_caption}")
         fb_url = upload_reel(edited_video_path, fb_caption)
         print(f"Successfully uploaded to Facebook: {fb_url}")
-        
         video_data["fb_url"] = fb_url
         fb_success = True
     except Exception as e:
@@ -63,7 +56,6 @@ def run_upload(video_data):
         video_data["fb_err"] = str(e)
         
     # YouTube Upload (independent of Facebook — always attempt)
-    yt_success = False
     try:
         print("Waiting 2 seconds before uploading to YouTube Shorts...")
         time.sleep(2)
@@ -82,8 +74,15 @@ def run_upload(video_data):
     # Set overall upload status: success if EITHER platform succeeded
     if fb_success or yt_success:
         video_data["upload_status"] = "Success"
+        status_parts = []
+        if fb_success:
+            status_parts.append("Facebook")
+        if yt_success:
+            status_parts.append("YouTube")
+        print(f"Upload completed successfully to: {', '.join(status_parts)}")
     else:
         video_data["upload_status"] = "Failed"
+        print("Both Facebook and YouTube uploads failed.")
 
     # Cleanup
     if os.path.exists(edited_video_path):

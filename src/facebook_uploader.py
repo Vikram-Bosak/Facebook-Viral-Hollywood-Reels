@@ -7,10 +7,26 @@ try:
 except ImportError:
     from logger import logger
 
+
+def _parse_fb_error(response):
+    """Parse Facebook API error from response."""
+    try:
+        err_data = response.json()
+        error_info = err_data.get('error', {})
+        return (
+            error_info.get('message'),
+            error_info.get('code'),
+            error_info.get('error_subcode')
+        )
+    except Exception:
+        return None, None, None
+
+
 def get_fb_credentials():
     access_token = os.environ.get('FB_ACCESS_TOKEN')
     page_id = os.environ.get('FB_PAGE_ID')
     return access_token, page_id
+
 
 def get_page_access_token(user_token, page_id):
     """
@@ -19,7 +35,7 @@ def get_page_access_token(user_token, page_id):
     """
     url = f"https://graph.facebook.com/v19.0/me/accounts?limit=100&access_token={user_token}"
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=15)
         if response.status_code == 200:
             data = response.json().get('data', [])
             for page in data:
@@ -28,18 +44,15 @@ def get_page_access_token(user_token, page_id):
                     return page.get('access_token')
             logger.warning(f"Target Page ID {page_id} not found in user accounts. Falling back to provided token.")
         else:
-            try:
-                err_data = response.json()
-                err_msg = err_data.get('error', {}).get('message')
-                if err_msg:
-                    logger.warning(f"Failed to query /me/accounts (status {response.status_code}): {err_msg}. Falling back to provided token.")
-                    return user_token
-            except Exception:
-                pass
-            logger.warning(f"Failed to query /me/accounts (status {response.status_code}). Falling back to provided token.")
+            err_msg, err_code, _ = _parse_fb_error(response)
+            if err_msg:
+                logger.warning(f"Failed to query /me/accounts (status {response.status_code}): {err_msg}. Falling back to provided token.")
+            else:
+                logger.warning(f"Failed to query /me/accounts (status {response.status_code}). Falling back to provided token.")
     except Exception as e:
         logger.error(f"Error resolving Page Access Token: {e}. Falling back to provided token.")
     return user_token
+
 
 def _handle_api_error(response, step_name):
     """
@@ -47,18 +60,36 @@ def _handle_api_error(response, step_name):
     the Facebook JSON error details and raises a descriptive Exception.
     """
     if response.status_code >= 400:
-        try:
-            err_data = response.json()
-            error_info = err_data.get('error', {})
-            err_msg = error_info.get('message')
-            err_code = error_info.get('code', 'unknown')
-            err_subcode = error_info.get('error_subcode', 'unknown')
-            if err_msg:
-                raise Exception(f"Facebook API Error ({step_name}): {err_msg} (code: {err_code}, subcode: {err_subcode})")
-        except Exception as e:
-            if "Facebook API Error" in str(e):
-                raise
-        response.raise_for_status()
+        err_msg, err_code, err_subcode = _parse_fb_error(response)
+        
+        # Provide specific guidance based on error code
+        if err_code == 190:
+            raise Exception(
+                f"Facebook API Error ({step_name}): Invalid/expired access token. "
+                f"Please generate a new Long-Lived Token. "
+                f"Error: {err_msg} (code: {err_code}, subcode: {err_subcode})"
+            )
+        elif response.status_code == 403:
+            raise Exception(
+                f"Facebook API Error ({step_name}): 403 Forbidden. "
+                f"Required permission: pages_manage_posts. "
+                f"Go to Facebook Developer Console → App Permissions → Enable pages_manage_posts. "
+                f"Error: {err_msg} (code: {err_code})"
+            )
+        elif response.status_code == 429:
+            raise Exception(
+                f"Facebook API Error ({step_name}): Rate limit reached. "
+                f"Wait a few minutes before retrying. "
+                f"Error: {err_msg}"
+            )
+        elif err_msg:
+            raise Exception(
+                f"Facebook API Error ({step_name}): {err_msg} "
+                f"(code: {err_code}, subcode: {err_subcode})"
+            )
+        else:
+            response.raise_for_status()
+
 
 def upload_reel(video_path, caption, title=None):
     """
@@ -72,7 +103,6 @@ def upload_reel(video_path, caption, title=None):
     logger.info("Initializing Facebook Graph API upload process...")
     # Resolve Page Access Token
     access_token = get_page_access_token(user_token, page_id)
-
     file_size = os.path.getsize(video_path)
     
     # Step 1: Initialize Upload
@@ -84,7 +114,7 @@ def upload_reel(video_path, caption, title=None):
         'file_size': file_size
     }
     
-    init_response = requests.post(init_url, data=init_payload)
+    init_response = requests.post(init_url, data=init_payload, timeout=30)
     _handle_api_error(init_response, "Initialize Upload")
     init_data = init_response.json()
     
@@ -105,7 +135,7 @@ def upload_reel(video_path, caption, title=None):
     with open(video_path, 'rb') as f:
         video_data = f.read()
         
-    upload_response = requests.post(upload_url, headers=headers, data=video_data)
+    upload_response = requests.post(upload_url, headers=headers, data=video_data, timeout=120)
     _handle_api_error(upload_response, "Upload Video Data")
     
     # Step 3: Publish Video
@@ -119,7 +149,7 @@ def upload_reel(video_path, caption, title=None):
         'description': caption
     }
     
-    publish_response = requests.post(publish_url, data=publish_payload)
+    publish_response = requests.post(publish_url, data=publish_payload, timeout=30)
     _handle_api_error(publish_response, "Publish Video")
     publish_data = publish_response.json()
     
@@ -128,6 +158,7 @@ def upload_reel(video_path, caption, title=None):
         return f"https://www.facebook.com/{page_id}/videos/{video_id}"
     else:
         raise Exception(f"Failed to publish reel: {publish_data}")
+
 
 def upload_photo(photo_path, caption):
     """
@@ -141,7 +172,6 @@ def upload_photo(photo_path, caption):
     logger.info("Initializing Facebook Graph API photo upload process...")
     # Resolve Page Access Token
     access_token = get_page_access_token(user_token, page_id)
-
     upload_url = f"https://graph.facebook.com/v19.0/{page_id}/photos"
     payload = {
         'access_token': access_token,
@@ -149,11 +179,9 @@ def upload_photo(photo_path, caption):
     }
     
     with open(photo_path, 'rb') as f:
-        files = {
-            'source': f
-        }
+        files = {'source': f}
         logger.info("Uploading photo to Facebook Page...")
-        response = requests.post(upload_url, data=payload, files=files)
+        response = requests.post(upload_url, data=payload, files=files, timeout=60)
         
     _handle_api_error(response, "Upload Photo")
     data = response.json()
