@@ -11,3 +11,6 @@ python-telegram-bot
 Pillow
 yt-dlp
 playwright
+pilmoji
+google-generativeai
+google-genai

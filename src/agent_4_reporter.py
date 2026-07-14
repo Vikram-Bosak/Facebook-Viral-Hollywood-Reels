@@ -3,29 +3,23 @@ import json
 import requests
 import shutil
 
-def send_telegram_message(message):
-    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-    chat_id = os.environ.get('TELEGRAM_CHAT_ID')
-    
-    if not bot_token or not chat_id:
-        print("Telegram bot configuration is missing. Skipping Telegram notification.")
+def send_discord_report(embed):
+    webhook_url = os.environ.get('DISCORD_WEBHOOK_URL')
+    if not webhook_url:
+        print("Discord Webhook URL is missing. Skipping Discord notification.")
         return False
         
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
-        'chat_id': chat_id,
-        'text': message,
-        'parse_mode': 'HTML',
-        'disable_web_page_preview': True
+        "embeds": [embed]
     }
     
     try:
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(webhook_url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
         response.raise_for_status()
-        print("Successfully sent unified Telegram report.")
+        print("Successfully sent unified Discord report.")
         return True
     except requests.exceptions.RequestException as e:
-        print(f"Failed to send Telegram message: {e}")
+        print(f"Failed to send Discord message: {e}")
         return False
 
 def main():
@@ -42,16 +36,31 @@ def main():
         report = {}
         
     # Default values in case keys are missing
-    video_name = report.get('video_name', 'N/A')
-    download_status = report.get('download_status', 'Failed / Unknown')
-    editing_status = report.get('editing_status', 'N/A')
-    upload_status = report.get('upload_status', 'N/A')
-    seo_title = report.get('seo_title', 'N/A')
-    description = report.get('description', 'N/A')
-    fb_url = report.get('facebook_url', 'N/A')
+    video_name = str(report.get('video_name') or 'N/A').strip()
+    download_status = str(report.get('download_status') or 'Failed / Unknown').strip()
+    editing_status = str(report.get('editing_status') or 'N/A').strip()
+    upload_status = str(report.get('upload_status') or 'N/A').strip()
+    seo_title = str(report.get('seo_title') or 'N/A').strip()
+    fb_url = str(report.get('facebook_url') or 'N/A').strip()
     
+    # Search for safety flags/actions in state json files
+    safety_info = "Clean (No risks flagged)"
+    try:
+        temp_files = os.listdir("temp")
+        state_files = [f for f in temp_files if f.startswith("state_upload_") and f.endswith(".json")]
+        if state_files:
+            state_path = os.path.join("temp", state_files[0])
+            with open(state_path, 'r') as sf:
+                state_data = json.load(sf)
+                flags = state_data.get("safety_flags", [])
+                actions = state_data.get("safety_actions", [])
+                if flags:
+                    safety_info = f"⚠️ Flags: {', '.join(flags)} | Applied Mod: {', '.join(actions) if actions else 'None'}"
+    except Exception as e:
+        print(f"Could not load safety state info: {e}")
+
     # Determine YouTube Status
-    yt_url = report.get('youtube_url', 'N/A')
+    yt_url = str(report.get('youtube_url') or 'N/A').strip()
     yt_status = "Success" if "youtube.com" in yt_url or "youtu.be" in yt_url else "Failed / N/A"
     
     # GitHub Action Variables
@@ -60,32 +69,46 @@ def main():
     repo_url = f"https://github.com/{repo}"
     run_url = f"{repo_url}/actions/runs/{run_id}"
     
-    emoji_status = "✅" if upload_status == "Success" else "❌"
+    is_success = upload_status == "Success"
+    color = 3066993 if is_success else 15158332
     
-    message = (
-        f"{emoji_status} <b>Pipeline Run Completed</b>\n\n"
-        f"🎬 <b>Video Name:</b>\n{video_name}\n\n"
-        f"📥 <b>Download Status:</b> {download_status}\n"
-        f"✂️ <b>Editing Status:</b> {editing_status}\n"
-        f"📤 <b>Facebook Upload Status:</b> {upload_status}\n"
-        f"📤 <b>YouTube Upload Status:</b> {yt_status}\n\n"
-        f"🏷️ <b>SEO Title:</b>\n{seo_title}\n\n"
-        f"📝 <b>Description:</b>\n{description}\n\n"
-        f"🔗 <b>Facebook Reel URL:</b>\n{fb_url}\n\n"
-        f"▶️ <b>YouTube Video URL:</b>\n{yt_url}\n\n"
-        f"📦 <b>GitHub Repository:</b>\n{repo_url}\n\n"
-        f"📄 <b>Workflow Run:</b>\n{run_url}"
-    )
+    embed = {
+        "title": "✅ Pipeline Run Completed Successfully" if is_success else "❌ Pipeline Run Failed",
+        "color": color,
+        "fields": [
+            {"name": "🎬 Video Name", "value": video_name, "inline": False},
+            {"name": "🛡️ Copyright & Safety Check", "value": safety_info, "inline": False},
+            {"name": "📥 Download Status", "value": download_status, "inline": True},
+            {"name": "✂️ Editing Status", "value": editing_status, "inline": True},
+            {"name": "📤 Facebook Upload", "value": upload_status, "inline": True},
+            {"name": "📤 YouTube Upload", "value": yt_status, "inline": True},
+            {"name": "🏷️ SEO Title", "value": seo_title, "inline": False},
+            {"name": "🔗 Facebook Reel URL", "value": fb_url, "inline": False},
+            {"name": "▶️ YouTube Video URL", "value": yt_url, "inline": False},
+            {"name": "📄 Workflow Run", "value": f"[View Run]({run_url})", "inline": False}
+        ],
+        "footer": {
+            "text": f"Repository: {repo} | Run ID: {run_id}"
+        }
+    }
     
     if "No new video" in download_status:
-        print("No new video to process. Skipping Telegram notification to avoid spam.")
+        print("No new video to process. Skipping Discord notification to avoid spam.")
     else:
-        send_telegram_message(message)
+        send_discord_report(embed)
     
     # Cleanup workspace completely
     if os.path.exists("workspace"):
         shutil.rmtree("workspace")
         print("Cleaned up workspace directory.")
+        
+    # Clean up temp state uploads
+    try:
+        for f in os.listdir("temp"):
+            if f.startswith("state_upload_") and f.endswith(".json"):
+                os.remove(os.path.join("temp", f))
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     main()

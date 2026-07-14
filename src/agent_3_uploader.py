@@ -2,7 +2,10 @@ import os
 import requests
 import random
 import time
+import logging
 from dotenv import load_dotenv
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Ensure we can import existing modules
 try:
@@ -15,7 +18,7 @@ except ImportError:
 load_dotenv()
 
 def run_upload(video_data):
-    print("Starting Agent 3: Facebook + YouTube Uploader")
+    logging.info("Starting Agent 3: Facebook + YouTube Uploader")
     
     edited_video_path = video_data.get('edited_path')
     title = video_data.get('title', 'Unknown Video')
@@ -23,22 +26,57 @@ def run_upload(video_data):
     source_url = video_data.get('source_url', '')
     
     if not edited_video_path or not os.path.exists(edited_video_path):
-        print("No edited video found to upload.")
+        logging.warning("No edited video found to upload.")
         return video_data
         
     if video_data.get("editing_status") != "Success":
-        print(f"Editing did not succeed (Status: {video_data.get('editing_status')}). Skipping upload.")
+        logging.warning(f"Editing did not succeed (Status: {video_data.get('editing_status')}). Skipping upload.")
         if os.path.exists(edited_video_path):
             os.remove(edited_video_path)
         return video_data
         
-    # Construct Facebook Caption
-    fb_caption = f"{headline}\n\n#hollywood #viral #entertainment\n\nOriginal Title: {title}\nSource: {source_url}"
+    # Construct Facebook Caption dynamically and parse YouTube SEO metadata
+    yt_title = title
+    yt_desc = ""
+    yt_tags = []
+    
+    try:
+        from src.common.seo_generator import generate_upload_metadata
+        task_id = video_data.get("id", "default")
+        state_file = f"temp/state_upload_{task_id}.json"
+        
+        if os.path.exists(state_file):
+            import json
+            with open(state_file, "r") as f:
+                context = json.load(f)
+        else:
+            context = video_data
+            
+        metadata = generate_upload_metadata(context)
+        fb_caption = f"{metadata.get('facebook_caption', headline)}\n\n{metadata.get('hashtags', '#Hollywood #Viral')}\n\nOriginal Title: {title}\nSource: {source_url}"
+        yt_title = metadata.get('title', title)
+        yt_desc = f"{metadata.get('description', '')}\n\nOriginal Title: {title}\nSource: {source_url}"
+        yt_tags = metadata.get('tags', [])
+    except Exception as e:
+        logging.error(f"Error generating dynamic SEO metadata: {e}")
+        fb_caption = f"{headline}\n\n#hollywood #viral #entertainment\n\nOriginal Title: {title}\nSource: {source_url}"
+        yt_title = title
+        yt_desc = fb_caption
+        yt_tags = ["hollywood", "viral", "entertainment"]
+        
     video_data["description"] = fb_caption
 
-    # Human-like delay before uploading (15 seconds to 2 minutes)
+    # Human simulation delay: 15s to 2 minutes
     delay_seconds = random.randint(15, 120)
-    print(f"Waiting for {delay_seconds} seconds before uploading...")
+    delay_minutes = delay_seconds / 60
+    logging.info(f"Waiting for {delay_seconds} seconds ({delay_minutes:.1f} minutes) before uploading to appear human...")
+    
+    try:
+        from src.common.discord import send_discord_message as send_message
+        send_message(f"⏳ <b>Simulation Delay Initiated:</b> Waiting {delay_minutes:.1f} minutes before upload to simulate human behavior...")
+    except Exception as e:
+        logging.warning(f"Failed to send delay report: {e}")
+        
     time.sleep(delay_seconds)
 
     fb_success = False
@@ -46,32 +84,34 @@ def run_upload(video_data):
 
     # Facebook Upload
     try:
-        print(f"Uploading to Facebook with caption: {fb_caption}")
+        logging.info(f"Uploading to Facebook with caption: {fb_caption}")
         fb_url = upload_reel(edited_video_path, fb_caption)
-        print(f"Successfully uploaded to Facebook: {fb_url}")
+        logging.info(f"Successfully uploaded to Facebook: {fb_url}")
         video_data["fb_url"] = fb_url
         fb_success = True
     except Exception as e:
-        print(f"Failed to upload to Facebook: {e}")
+        logging.error(f"Failed to upload to Facebook: {e}")
         video_data["fb_err"] = str(e)
         
-    # YouTube Upload (independent of Facebook — always attempt)
+    # YouTube Upload (runs independently of Facebook)
     try:
-        print("Waiting 2 seconds before uploading to YouTube Shorts...")
+        logging.info("Waiting 2 seconds before uploading to YouTube Shorts...")
         time.sleep(2)
         
-        yt_title = title[:100]  # YouTube title limit is 100 chars
-        yt_desc = f"{fb_caption}\n#shorts"
-        
-        yt_url = upload_to_youtube(edited_video_path, yt_title, yt_desc)
-        print(f"Successfully uploaded to YouTube: {yt_url}")
+        yt_title_clean = yt_title[:100]
+        if "#shorts" not in yt_desc.lower():
+            yt_desc = f"{yt_desc}\n\n#shorts"
+            
+        logging.info(f"Starting YouTube Shorts upload: title='{yt_title_clean}', tags={yt_tags}")
+        yt_url = upload_to_youtube(edited_video_path, yt_title_clean, yt_desc)
+        logging.info(f"Successfully uploaded to YouTube Shorts: {yt_url}")
         video_data["yt_url"] = yt_url
         yt_success = True
     except Exception as e:
-        print(f"Failed to upload to YouTube: {e}")
+        logging.error(f"Failed to upload to YouTube: {e}")
         video_data["yt_err"] = str(e)
-
-    # Set overall upload status: success if EITHER platform succeeded
+        
+    # Set overall status based on whether at least one upload succeeded
     if fb_success or yt_success:
         video_data["upload_status"] = "Success"
         status_parts = []
@@ -79,14 +119,18 @@ def run_upload(video_data):
             status_parts.append("Facebook")
         if yt_success:
             status_parts.append("YouTube")
-        print(f"Upload completed successfully to: {', '.join(status_parts)}")
+        logging.info(f"Upload completed successfully to: {', '.join(status_parts)}")
     else:
         video_data["upload_status"] = "Failed"
-        print("Both Facebook and YouTube uploads failed.")
-
-    # Cleanup
-    if os.path.exists(edited_video_path):
-        os.remove(edited_video_path)
+        logging.error("Both Facebook and YouTube uploads failed.")
+        
+    # Cleanup — always runs regardless of upload outcome
+    try:
+        if os.path.exists(edited_video_path):
+            os.remove(edited_video_path)
+            logging.info(f"Cleaned up video file: {edited_video_path}")
+    except Exception as e:
+        logging.warning(f"Failed to clean up video file {edited_video_path}: {e}")
         
     return video_data
 
