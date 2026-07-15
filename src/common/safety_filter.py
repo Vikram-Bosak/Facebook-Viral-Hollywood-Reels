@@ -7,7 +7,9 @@ RISK_KEYWORDS = [
     "attack", "arrest", "protest", "death", "die", "killed", "war", 
     "weapons", "gun", "disaster", "tragedy", "abuse", "scandal",
     "hbo", "netflix", "disney", "paramount", "universal pictures",
-    "warner bros", "marvel", "tmz", "etnow", "e! news", "e news"
+    "warner bros", "marvel", "tmz", "etnow", "e! news", "e news",
+    "music", "song", "album", "rapper", "track", "singer", 
+    "concert", "spotify", "billboard", "tour", "teasing new music"
 ]
 
 def check_metadata_safety(title: str, description: str) -> dict:

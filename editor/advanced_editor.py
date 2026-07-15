@@ -51,7 +51,8 @@ def edit_3_4_custom_layout_template(input_path: str, logo_path: str, output_path
     cmd = ["ffmpeg", "-y", "-i", input_path, "-i", frame_path]
 
     if has_audio and "mute_audio" not in safety_actions:
-        filter_complex += ";[0:a]volume=1.5,loudnorm=I=-16:TP=-1.5:LRA=11[outa]"
+        # atempo=1.05 speeds up audio to match video (PTS/1.05), which also slightly helps bypass Content ID
+        filter_complex += ";[0:a]atempo=1.05,volume=1.5,loudnorm=I=-16:TP=-1.5:LRA=11[outa]"
         cmd.extend(["-filter_complex", filter_complex, "-map", "[outv]", "-map", "[outa]"])
     else:
         cmd.extend(["-filter_complex", filter_complex, "-map", "[outv]"])

@@ -5,9 +5,9 @@ on:
     branches:
       - main
   schedule:
-    # 4 runs/day — 1 video per run = 4 reels/day to avoid rate limits
-    # UTC 02:00, 08:00, 14:00, 20:00
-    - cron: '0 2,8,14,20 * * *'
+    # 12 runs/day — 1 video per run = 12 reels/day to avoid rate limits
+    # Every 2 hours
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
 jobs:

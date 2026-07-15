@@ -170,6 +170,19 @@ def search_and_download_latest_videos(count=1):
             if os.path.exists(temp_path):
                 os.remove(temp_path)
                 
+            print(f"Extracting info to check aspect ratio...")
+            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                info = ydl.extract_info(original_tweet_url, download=False)
+                
+            width = info.get('width')
+            height = info.get('height')
+            
+            if width and height:
+                # Check for 9:16 (vertical video)
+                if width >= height:
+                    print(f"Skipping {original_tweet_url} as it is not a 9:16 vertical video ({width}x{height})")
+                    continue
+            
             print(f"Downloading with yt-dlp...")
             # Use unique path for batch downloads
             unique_path = f"workspace/raw_video_{tweet_id}.mp4"
