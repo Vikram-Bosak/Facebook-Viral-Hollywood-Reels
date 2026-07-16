@@ -43,7 +43,19 @@ def search_and_download_latest_videos(count=1):
         "https://x.com/DiscussingFilm",
         "https://x.com/etalkCTV",
         "https://x.com/BuzzFeed",
-        "https://x.com/Complex"
+        "https://x.com/Complex",
+        "https://x.com/PopTingz",
+        "https://x.com/TMZ",
+        "https://x.com/voguemagazine",
+        "https://x.com/VanityFair",
+        "https://x.com/21metgala",
+        "https://x.com/PopFlopHQ",
+        "https://x.com/GQMagazine",
+        "https://x.com/IndieWire",
+        "https://x.com/kchartsmaster",
+        "https://x.com/PopDataBot",
+        "https://x.com/ThePopHub",
+        "https://x.com/Dexerto"
     ]
         
     usernames = []
