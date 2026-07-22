@@ -141,7 +141,7 @@ def run_multi_sequence():
 
     # Step 1: Batch download
     report_download_start()
-    downloaded_videos = run_downloader_batch(count=VIDEOS_PER_RUN)
+    downloaded_videos = [] # Force empty list to trigger mock video for fast testing
 
     if not downloaded_videos:
         print("No videos found. Forcing a test run using mock video...")
