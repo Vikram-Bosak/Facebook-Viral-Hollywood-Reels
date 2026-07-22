@@ -84,7 +84,11 @@ class TikTokUploadAgent:
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
-                context = browser.new_context(storage_state=self.state_file)
+                context = browser.new_context(
+                    storage_state=self.state_file,
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 800}
+                )
                 page = context.new_page()
                 
                 logging.info("TikTok Uploader: Navigating to upload page...")
