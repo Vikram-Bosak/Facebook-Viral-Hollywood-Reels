@@ -84,15 +84,34 @@ def run_upload(video_data):
     fb_success = False
     yt_success = False
 
-    # Facebook Upload (Disabled for TikTok testing)
-    logging.info("Facebook upload disabled for TikTok-only testing.")
-    video_data["fb_url"] = "https://facebook.com/disabled-for-testing"
-    fb_success = True
+    # Facebook Upload
+    try:
+        logging.info(f"Uploading to Facebook with caption: {fb_caption}")
+        fb_url = upload_reel(edited_video_path, fb_caption)
+        logging.info(f"Successfully uploaded to Facebook: {fb_url}")
+        video_data["fb_url"] = fb_url
+        fb_success = True
+    except Exception as e:
+        logging.error(f"Failed to upload to Facebook: {e}")
+        video_data["fb_err"] = str(e)
         
-    # YouTube Upload (Disabled for TikTok testing)
-    logging.info("YouTube Shorts upload disabled for TikTok-only testing.")
-    video_data["yt_url"] = "https://youtube.com/disabled-for-testing"
-    yt_success = True
+    # YouTube Upload (runs independently of Facebook)
+    try:
+        logging.info("Waiting 2 seconds before uploading to YouTube Shorts...")
+        time.sleep(2)
+        
+        yt_title_clean = yt_title[:100]
+        if "#shorts" not in yt_desc.lower():
+            yt_desc = f"{yt_desc}\n\n#shorts"
+            
+        logging.info(f"Starting YouTube Shorts upload: title='{yt_title_clean}', tags={yt_tags}")
+        yt_url = upload_to_youtube(edited_video_path, yt_title_clean, yt_desc)
+        logging.info(f"Successfully uploaded to YouTube Shorts: {yt_url}")
+        video_data["yt_url"] = yt_url
+        yt_success = True
+    except Exception as e:
+        logging.error(f"Failed to upload to YouTube: {e}")
+        video_data["yt_err"] = str(e)
 
     # TikTok Upload
     tt_success = False

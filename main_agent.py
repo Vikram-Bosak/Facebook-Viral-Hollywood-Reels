@@ -59,7 +59,17 @@ def run_single_video(video_data, video_number, total, report_data):
     write_report(report_data)
 
     # Pre-screening text metadata safety check
-    safety_check = {"is_safe": True} # Bypass for verification
+    from src.common.safety_filter import check_metadata_safety
+    safety_check = check_metadata_safety(title, source_url)
+    if not safety_check["is_safe"]:
+        reasons = ", ".join(safety_check["reasons"])
+        print(f"Video {task_id} rejected by safety filter: {reasons}")
+        send_message(f"⚠️ <b>Video {task_id} Rejected by Safety Filter:</b>\n{reasons}")
+        report_data["download_status"] = f"Rejected (Safety: {reasons})"
+        write_report(report_data)
+        save_to_history(task_id)
+        push_history_mid_run()
+        return False
 
     report_download_complete(source_url)
     send_message(f"🆔 <b>Video {video_number}/{total} — ID:</b> {task_id}")
@@ -141,28 +151,14 @@ def run_multi_sequence():
 
     # Step 1: Batch download
     report_download_start()
-    downloaded_videos = [] # Force empty list to trigger mock video for fast testing
+    downloaded_videos = run_downloader_batch(count=VIDEOS_PER_RUN)
 
     if not downloaded_videos:
-        print("No videos found. Forcing a test run using mock video...")
-        try:
-            os.makedirs("workspace", exist_ok=True)
-            import requests
-            r = requests.get("https://www.w3schools.com/html/mov_bbb.mp4", headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
-            r.raise_for_status()
-            with open("workspace/raw_video_test.mp4", "wb") as f:
-                f.write(r.content)
-            downloaded_videos = [{
-                "id": f"test_{int(time.time())}",
-                "tweet_id": f"test_{int(time.time())}",
-                "local_path": "workspace/raw_video_test.mp4",
-                "source_url": "https://twitter.com/Complex",
-                "title": "Hollywood Reels Test Clip",
-                "seo_title": "Hollywood Reels Magic Moment"
-            }]
-        except Exception as mock_err:
-            print(f"Failed to download mock video: {mock_err}")
-            return False
+        send_message("⚠️ <b>Batch Download:</b> No new videos found across all X profiles.")
+        print("No videos downloaded. Exiting pipeline.")
+        report_data["download_status"] = "No new video found"
+        write_report(report_data)
+        return False
 
     print(f"\n✅ Downloaded {len(downloaded_videos)} videos. Starting processing...\n")
 
