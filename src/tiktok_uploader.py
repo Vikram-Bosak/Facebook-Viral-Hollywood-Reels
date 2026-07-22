@@ -201,6 +201,12 @@ class TikTokUploadAgent:
             
         except Exception as e:
             logging.error(f"TikTok Uploader: Playwright upload error: {e}")
+            try:
+                if 'page' in locals() and page:
+                    page.screenshot(path="tiktok_error.png")
+                    logging.info("TikTok Uploader: Saved debug screenshot of error to tiktok_error.png")
+            except Exception as ss_err:
+                logging.error(f"TikTok Uploader: Failed to save error screenshot: {ss_err}")
             raise e
 
 def upload_tiktok(video_path, caption):
