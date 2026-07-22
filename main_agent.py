@@ -116,6 +116,7 @@ def run_single_video(video_data, video_number, total, report_data):
     report_data["upload_status"] = video_data.get('upload_status', 'Failed')
     report_data["facebook_url"] = video_data.get('fb_url', 'N/A')
     report_data["youtube_url"] = video_data.get('yt_url', 'N/A')
+    report_data["tiktok_url"] = video_data.get('tiktok_url', 'N/A')
     report_data["seo_title"] = video_data.get('seo_title', 'N/A')
     report_data["description"] = video_data.get('description', 'N/A')
     write_report(report_data)

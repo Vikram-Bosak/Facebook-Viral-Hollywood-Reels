@@ -40,6 +40,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          playwright install chromium
 
       - name: 🚀 Run Pipeline (1 video per run)
         id: main_agent
@@ -50,6 +51,9 @@ jobs:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TIKTOK_AUTH_STATE: ${{ secrets.TIKTOK_AUTH_STATE }}
+          TIKTOK_AUTH_STATE_B64: ${{ secrets.TIKTOK_AUTH_STATE_B64 }}
+          TIKTOK_USERNAME: ${{ secrets.TIKTOK_USERNAME }}
         run: |
           echo "Starting Pipeline (1 video per run)..."
           python main_agent.py
@@ -68,6 +72,7 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git add downloaded_history.txt || true
           git add temp/daily_limits.json || true
-          git commit -m "Update download history and limits" || true
+          git add -f tiktok_error.png || true
+          git commit -m "Update download history and limits (including debug screenshot)" || true
           git pull origin main --rebase --strategy-option=ours || true
           git push origin HEAD:main || true

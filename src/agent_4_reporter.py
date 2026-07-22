@@ -62,6 +62,10 @@ def main():
     # Determine YouTube Status
     yt_url = str(report.get('youtube_url') or 'N/A').strip()
     yt_status = "Success" if "youtube.com" in yt_url or "youtu.be" in yt_url else "Failed / N/A"
+
+    # Determine TikTok Status
+    tiktok_url = str(report.get('tiktok_url') or 'N/A').strip()
+    tiktok_status = "Success" if "tiktok.com" in tiktok_url else "Failed / N/A"
     
     # GitHub Action Variables
     repo = os.environ.get('GITHUB_REPOSITORY', 'Vikram-Bosak/Facebook-Viral-Hollywood-Reels')
@@ -82,9 +86,11 @@ def main():
             {"name": "✂️ Editing Status", "value": editing_status, "inline": True},
             {"name": "📤 Facebook Upload", "value": upload_status, "inline": True},
             {"name": "📤 YouTube Upload", "value": yt_status, "inline": True},
+            {"name": "📤 TikTok Upload", "value": tiktok_status, "inline": True},
             {"name": "🏷️ SEO Title", "value": seo_title, "inline": False},
             {"name": "🔗 Facebook Reel URL", "value": fb_url, "inline": False},
             {"name": "▶️ YouTube Video URL", "value": yt_url, "inline": False},
+            {"name": "🎵 TikTok Video URL", "value": tiktok_url, "inline": False},
             {"name": "📄 Workflow Run", "value": f"[View Run]({run_url})", "inline": False}
         ],
         "footer": {

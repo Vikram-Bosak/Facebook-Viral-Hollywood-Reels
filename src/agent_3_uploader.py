@@ -11,9 +11,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 try:
     from src.facebook_uploader import upload_reel
     from src.youtube_uploader import upload_to_youtube
+    from src.tiktok_uploader import upload_tiktok
 except ImportError:
     from facebook_uploader import upload_reel
     from youtube_uploader import upload_to_youtube
+    from tiktok_uploader import upload_tiktok
 
 load_dotenv()
 
@@ -110,19 +112,36 @@ def run_upload(video_data):
     except Exception as e:
         logging.error(f"Failed to upload to YouTube: {e}")
         video_data["yt_err"] = str(e)
+
+    # TikTok Upload
+    tt_success = False
+    try:
+        logging.info("Waiting 2 seconds before uploading to TikTok...")
+        time.sleep(2)
+        
+        logging.info("Starting TikTok upload...")
+        tiktok_url = upload_tiktok(edited_video_path, fb_caption)
+        logging.info(f"Successfully uploaded to TikTok: {tiktok_url}")
+        video_data["tiktok_url"] = tiktok_url
+        tt_success = True
+    except Exception as e:
+        logging.error(f"Failed to upload to TikTok: {e}")
+        video_data["tiktok_err"] = str(e)
         
     # Set overall status based on whether at least one upload succeeded
-    if fb_success or yt_success:
+    if fb_success or yt_success or tt_success:
         video_data["upload_status"] = "Success"
         status_parts = []
         if fb_success:
             status_parts.append("Facebook")
         if yt_success:
             status_parts.append("YouTube")
+        if tt_success:
+            status_parts.append("TikTok")
         logging.info(f"Upload completed successfully to: {', '.join(status_parts)}")
     else:
         video_data["upload_status"] = "Failed"
-        logging.error("Both Facebook and YouTube uploads failed.")
+        logging.error("All uploads (Facebook, YouTube, TikTok) failed.")
         
     # Cleanup — always runs regardless of upload outcome
     try:
