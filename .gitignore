@@ -25,3 +25,6 @@ workspace/
 auth_venv/
 client_secrets.json
 youtube_token.json
+tiktok_auth_state.json
+tiktok_error.png
+
